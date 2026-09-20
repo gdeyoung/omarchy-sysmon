@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "gdeyoung.sysmon",
+  "name": "SysMon",
+  "version": "0.1.0",
+  "author": "gdeyoung",
+  "license": "MIT",
+  "description": "Live RAM, CPU, network rate, and whole-disk usage in the bar",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "SysMon",
+    "description": "RAM (/proc/meminfo), CPU (/proc/stat deltas), net rate (interface counters), whole-disk usage (df + lsblk) — red above 90%",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshSeconds": 2
+    },
+    "schema": [
+      { "key": "refreshSeconds", "type": "integer", "label": "Refresh interval (seconds)", "min": 1, "max": 10, "step": 1, "defaultValue": 2 }
+    ]
+  }
+}
