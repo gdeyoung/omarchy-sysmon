@@ -87,6 +87,9 @@ BarWidget {
   property real prevDiskWrites: -1
 
   readonly property int refreshSeconds: Math.max(1, Math.min(10, Number(setting("refreshSeconds", 2)) || 2))
+  // "compact" = letter + 5px level bar only (numbers live in the hover tooltip
+  // and the detail popup); "values" = the original full readouts.
+  readonly property bool compactMode: setting("barMode", "compact") !== "values"
   readonly property real ramPct: ramTotalMb > 0 ? (ramUsedMb / ramTotalMb) * 100 : 0
   readonly property real diskPct: diskTotalB > 0 ? (diskUsedB / diskTotalB) * 100 : 0
   readonly property real netActPct: netDownBps < 0 ? 0 :
@@ -295,7 +298,8 @@ BarWidget {
   }
 
   visible: true
-  implicitWidth: root.vertical ? Style.bar.statusSlot : (row.implicitWidth + 16)
+  implicitWidth: root.vertical ? Style.bar.statusSlot
+    : (root.compactMode ? (compactRow.implicitWidth + 12) : (row.implicitWidth + 16))
   implicitHeight: root.vertical ? (col.implicitHeight + 12) : root.barSize
 
   IpcHandler {
@@ -406,9 +410,78 @@ BarWidget {
     }
   }
 
+  // Compact mode: letter + level bar only. Fixed width per group (iconW + 4 +
+  // 5 + spacing) so the bar never shifts between ticks; values live in the
+  // hover tooltip and the detail popup.
+  Row {
+    id: compactRow
+    visible: !root.vertical && root.compactMode
+    anchors.centerIn: parent
+    spacing: 8
+
+    component CompactGroup: Row {
+      id: grp
+      property string icon
+      property real pct: 0
+      property color barColor: "#3fb950"
+      width: iconW + 4 + 5
+      spacing: 4
+      anchors.verticalCenter: parent.verticalCenter
+
+      Text {
+        width: root.iconW
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+        text: grp.icon
+        font.family: Style.font.family
+        font.pixelSize: Style.font.bodySmall
+        color: Color.accent
+        anchors.verticalCenter: parent.verticalCenter
+      }
+
+      Rectangle {
+        width: 5
+        height: 16
+        radius: 2
+        color: "#2c313a"
+        anchors.verticalCenter: parent.verticalCenter
+
+        Rectangle {
+          anchors.bottom: parent.bottom
+          anchors.horizontalCenter: parent.horizontalCenter
+          width: parent.width
+          height: parent.height * Math.max(0, Math.min(100, grp.pct)) / 100
+          radius: 2
+          color: grp.barColor
+        }
+      }
+    }
+
+    CompactGroup {
+      icon: "M"
+      pct: root.ramPct
+      barColor: root.levelColor(root.ramPct)
+    }
+    CompactGroup {
+      icon: "C"
+      pct: root.cpuPct
+      barColor: root.levelColor(root.cpuPct)
+    }
+    CompactGroup {
+      icon: "N"
+      pct: root.netActPct
+      barColor: "#7aa2f7"
+    }
+    CompactGroup {
+      icon: "D"
+      pct: root.diskPct
+      barColor: root.levelColor(root.diskPct)
+    }
+  }
+
   Row {
     id: row
-    visible: !root.vertical
+    visible: !root.vertical && !root.compactMode
     anchors.centerIn: parent
     spacing: 8
 
