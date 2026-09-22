@@ -1,72 +1,56 @@
 import QtQuick
+import QtQuick.Layouts
 
-// HistBars — histogram of a {t, v} series as a row of Repeater rectangles.
-// 12 fixed-width bins over [lo, hi] (default 0..100 for percent series).
-// Bins tint with the section's active color, opacity scaled by count (heat);
-// the current-value bin sits at full opacity. logScale maps v through the
-// same log activity curve the bar uses (1 Gbit/s = 100).
+// HistBars — scrolling bar chart of a {t, v} series: one bar per sample,
+// newest at the right, older bars fading toward the left. No positioner:
+// bars get explicit x/y (anchors inside Row/Column are ignored by QML
+// positioners — the original bug that made all bars vanish).
+// logScale maps v through the log activity curve (1 Gbit/s = 100).
 Item {
   id: root
+
   property var series: []
-  property int bins: 12
-  property real lo: 0
-  property real hi: 100
   property bool logScale: false
   property color activeColor: "#3fb950"
-  property real barW: 10
+  property real barW: 7
   property real gap: 3
-  property real maxH: 30
+  property real maxH: 34
+  property int maxBars: 220
+
+  Layout.fillWidth: true
+  implicitHeight: maxH
 
   function mapV(v) {
     return logScale ? (Math.log(1 + v) / Math.log(1 + 125000000)) * 100 : v
   }
 
-  readonly property var counts: {
-    const c = new Array(bins).fill(0)
-    if (series && series.length > 0) {
-      for (let i = 0; i < series.length; i++) {
-        let b = Math.floor(((mapV(series[i].v) - lo) / (hi - lo)) * bins)
-        if (b < 0) b = 0
-        if (b >= bins) b = bins - 1
-        c[b]++
-      }
-    }
-    return c
-  }
-  readonly property real maxCount: {
-    let m = 0
-    for (let i = 0; i < counts.length; i++) if (counts[i] > m) m = counts[i]
-    return m > 0 ? m : 1
-  }
-  readonly property int currentBin: {
-    if (!series || series.length === 0) return -1
-    let b = Math.floor(((mapV(series[series.length - 1].v) - lo) / (hi - lo)) * bins)
-    if (b < 0) b = 0
-    if (b >= bins) b = bins - 1
-    return b
+  readonly property real step: barW + gap
+
+  // How many bars fit the current width (>= 4 during layout warm-up).
+  readonly property int nBars: Math.max(4, Math.min(maxBars, Math.floor((width + gap + 0.5) / step)))
+
+  // Newest nBars samples, oldest first (last element = now).
+  readonly property var view: {
+    const s = series || []
+    const n = Math.min(nBars, s.length)
+    return n > 0 ? s.slice(s.length - n) : []
   }
 
-  implicitWidth: bins * barW + (bins - 1) * gap
-  implicitHeight: maxH
+  Repeater {
+    model: root.view.length
 
-  Row {
-    anchors.bottom: parent.bottom
-    anchors.left: parent.left
-    spacing: root.gap
-
-    Repeater {
-      model: root.bins
-
-      Rectangle {
-        required property int index
-        readonly property real c: root.counts[index] || 0
-        width: root.barW
-        radius: 2
-        color: root.activeColor
-        opacity: index === root.currentBin ? 1.0 : (c === 0 ? 0.10 : 0.18 + 0.72 * (c / root.maxCount))
-        height: c === 0 ? 3 : Math.max(4, (c / root.maxCount) * (root.maxH - 2))
-        anchors.bottom: parent.bottom
-      }
+    Rectangle {
+      id: bar
+      required property int index
+      readonly property real v: root.mapV(Number(root.view[bar.index].v) || 0)
+      // right-aligned, newest (last index) flush right
+      x: root.width - (root.view.length - bar.index) * root.step + root.gap
+      y: root.maxH - bar.height
+      width: root.barW
+      height: Math.max(2, Math.min(100, bar.v) / 100 * (root.maxH - 2))
+      radius: 1
+      color: root.activeColor
+      opacity: 0.30 + 0.62 * ((bar.index + 1) / root.view.length)
     }
   }
 }

@@ -17,13 +17,16 @@ ColumnLayout {
   function toggle() { sec.expanded = !sec.expanded }
 
   Rectangle {
+    id: headerBg
     Layout.fillWidth: true
     implicitHeight: headerRow.implicitHeight + Style.space(8)
     radius: Style.space(4)
-    color: "#22262e"
+    color: headerMouse.containsMouse ? "#282c36" : "#22262e"
 
     MouseArea {
+      id: headerMouse
       anchors.fill: parent
+      cursorShape: Qt.PointingHandCursor
       onClicked: sec.toggle()
       hoverEnabled: true
     }

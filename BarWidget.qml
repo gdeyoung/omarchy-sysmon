@@ -37,9 +37,12 @@ BarWidget {
   property var histCoreMax: []      // busiest core % — violet overlay line
 
   function pushHist(arr, t, v) {
-    arr.push({ t: t, v: v })
-    if (arr.length > histMax) arr.shift()
-    return arr
+    // Return a NEW array each tick: property var change notification only
+    // fires on reassignment of a different reference — in-place mutation
+    // leaves bound charts frozen.
+    const out = arr.length >= histMax ? arr.slice(1) : arr.slice()
+    out.push({ t: t, v: v })
+    return out
   }
 
   // ---- Latest probe values ------------------------------------------------
@@ -331,29 +334,29 @@ BarWidget {
     root.prevStampMs = now
 
     // ---- History append (always, so the panel opens warm) -----------------
-    if (root.cpuPct >= 0) pushHist(root.histCpu, now, root.cpuPct)
+    if (root.cpuPct >= 0) root.histCpu = pushHist(root.histCpu, now, root.cpuPct)
     if (root.corePcts.length > 0) {
       let sum = 0, mx = 0
       for (let i = 0; i < root.corePcts.length; i++) {
         sum += root.corePcts[i]
         if (root.corePcts[i] > mx) mx = root.corePcts[i]
       }
-      pushHist(root.histCoreAvg, now, sum / root.corePcts.length)
-      pushHist(root.histCoreMax, now, mx)
+      root.histCoreAvg = pushHist(root.histCoreAvg, now, sum / root.corePcts.length)
+      root.histCoreMax = pushHist(root.histCoreMax, now, mx)
     }
-    pushHist(root.histRam, now, root.ramPct)
+    root.histRam = pushHist(root.histRam, now, root.ramPct)
     if (root.netDownBps >= 0) {
-      pushHist(root.histNetDown, now, root.netDownBps)
-      pushHist(root.histNetUp, now, root.netUpBps)
+      root.histNetDown = pushHist(root.histNetDown, now, root.netDownBps)
+      root.histNetUp = pushHist(root.histNetUp, now, root.netUpBps)
     }
-    if (root.gpuBusyPct >= 0) pushHist(root.histGpuBusy, now, root.gpuBusyPct)
+    if (root.gpuBusyPct >= 0) root.histGpuBusy = pushHist(root.histGpuBusy, now, root.gpuBusyPct)
     if (root.vramUsedB >= 0 && root.vramTotalB > 0)
-      pushHist(root.histVram, now, (root.vramUsedB / root.vramTotalB) * 100)
+      root.histVram = pushHist(root.histVram, now, (root.vramUsedB / root.vramTotalB) * 100)
     if (root.gttUsedB >= 0 && root.gttTotalB > 0)
-      pushHist(root.histGtt, now, (root.gttUsedB / root.gttTotalB) * 100)
+      root.histGtt = pushHist(root.histGtt, now, (root.gttUsedB / root.gttTotalB) * 100)
     if (root.diskReadBps >= 0) {
-      pushHist(root.histDiskR, now, root.diskReadBps)
-      pushHist(root.histDiskW, now, root.diskWriteBps)
+      root.histDiskR = pushHist(root.histDiskR, now, root.diskReadBps)
+      root.histDiskW = pushHist(root.histDiskW, now, root.diskWriteBps)
     }
   }
 

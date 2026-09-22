@@ -124,7 +124,7 @@ PopupCard {
             font.pixelSize: Style.font.caption
             font.bold: tb.active
           }
-          MouseArea { anchors.fill: parent; onClicked: popup.tab = tb.key }
+          MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: popup.tab = tb.key }
         }
 
         TabBtn { key: "perf"; label: "Performance" }
@@ -442,7 +442,7 @@ PopupCard {
             color: Color.accent
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
-            MouseArea { anchors.fill: parent; onClicked: w.procSort = (w.procSort === "cpu" ? "mem" : "cpu") }
+            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: w.procSort = (w.procSort === "cpu" ? "mem" : "cpu") }
           }
         }
 
@@ -491,9 +491,11 @@ PopupCard {
                   width: 42
                   height: 16
                   radius: 3
-                  color: "#3b2430"
+                  color: killMouse.containsMouse ? "#54303c" : "#3b2430"
+                  border.width: killMouse.containsMouse ? 1 : 0
+                  border.color: "#f7768e"
                   Text { anchors.centerIn: parent; text: "kill"; color: "#f7768e"; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-                  MouseArea { anchors.fill: parent; onClicked: w.killTarget = procRow.modelData[0] }
+                  MouseArea { id: killMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: w.killTarget = procRow.modelData[0] }
                 }
               }
             }
@@ -520,14 +522,20 @@ PopupCard {
               font.pixelSize: Style.font.caption
             }
             Rectangle {
-              width: 96; height: 22; radius: 3; color: "#3b2430"
+              id: confirmBtn
+              width: 96; height: 22; radius: 3
+              color: confirmMouse.containsMouse ? "#54303c" : "#3b2430"
+              border.width: confirmMouse.containsMouse ? 1 : 0
+              border.color: "#f7768e"
               Text { anchors.centerIn: parent; text: w.killAlive ? "Force kill (9)" : "Kill (TERM)"; color: "#f7768e"; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-              MouseArea { anchors.fill: parent; onClicked: w.doKill(w.killTarget, w.killAlive ? 9 : 15) }
+              MouseArea { id: confirmMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: w.doKill(w.killTarget, w.killAlive ? 9 : 15) }
             }
             Rectangle {
-              width: 60; height: 22; radius: 3; color: "#232733"
+              id: cancelBtn
+              width: 60; height: 22; radius: 3
+              color: cancelMouse.containsMouse ? "#2c3040" : "#232733"
               Text { anchors.centerIn: parent; text: "Cancel"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-              MouseArea { anchors.fill: parent; onClicked: w.killTarget = 0 }
+              MouseArea { id: cancelMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: w.killTarget = 0 }
             }
           }
         }
