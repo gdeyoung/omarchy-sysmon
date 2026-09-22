@@ -83,10 +83,18 @@ BarWidget {
   property var procs: []            // [[pid,user,comm,pcpu,pmem,state],...]
   property string procSort: "cpu"
   property int killTarget: 0
+  property bool killTermed: false   // true after a TERM was sent to killTarget
+  // The popup gates the kill affordance on this; uname resolves at runtime.
+  readonly property string userName: Quickshell.env("USER") || ""
   readonly property var killRow: {
     for (let i = 0; i < procs.length; i++)
       if (procs[i][0] === killTarget) return procs[i]
     return null
+  }
+  // Process died (TERM worked, or it exited) → clear the confirm strip.
+  onKillRowChanged: if (killRow === null && killTarget > 0) {
+    killTarget = 0
+    killTermed = false
   }
   readonly property string killName: killRow ? killRow[2] : ""
   readonly property bool killAlive: killRow !== null
@@ -100,8 +108,16 @@ BarWidget {
 
   function doKill(pid, sig) {
     Quickshell.execDetached(["kill", "-" + sig, String(pid)])
-    killTarget = 0
-    Qt.callLater(refreshProcs)
+    if (sig === 15) {
+      // Keep the target selected; if it survives the next proc refresh the
+      // confirm strip escalates to Force kill (9).
+      killTermed = true
+      Qt.callLater(refreshProcs)
+    } else {
+      killTarget = 0
+      killTermed = false
+      Qt.callLater(refreshProcs)
+    }
   }
 
   function refreshProcs() {
