@@ -6,16 +6,41 @@ import qs.Ui
 
 // SysMon bar widget (gdeyoung.sysmon) — forked from vm.sysmem by jhonoryza (MIT).
 //
-// Five stat groups:  M = RAM   V = GPU VRAM   C = CPU   N = net rate   D = /home volume
+// Four stat groups:  M = RAM   C = CPU   N = net rate   D = /home volume
 // The probe (sysmon.sh) emits cumulative counters; this widget computes CPU% and
 // net rates from deltas between ticks. Values turn amber above 70%, red above 90%.
 // The N group has no natural percent — its bar is a log-scale activity meter
 // (0 B/s = 0%, 1 Gbit/s = 100%).
+//
+// The probe also carries detail fields (per-core jiffies, load, swap, temps,
+// GPU load/VRAM/GTT/power, disk IO, per-interface counters). apply() folds them
+// into ring buffers (histMax samples) whether or not a detail view is open, so
+// the panel opens with warm history. GPU data is popup-only: the bar renders
+// nothing for it.
 BarWidget {
   id: root
   moduleName: "gdeyoung.sysmon"
 
-  // Latest probe values
+  // ---- History ring buffers ({t, v} arrays, appended every probe tick) -----
+  readonly property int histMax: 180
+
+  property var histCpu: []
+  property var histRam: []
+  property var histNetDown: []
+  property var histNetUp: []
+  property var histGpuBusy: []
+  property var histVram: []
+  property var histGtt: []
+  property var histDiskR: []
+  property var histDiskW: []
+
+  function pushHist(arr, t, v) {
+    arr.push({ t: t, v: v })
+    if (arr.length > histMax) arr.shift()
+    return arr
+  }
+
+  // ---- Latest probe values ------------------------------------------------
   property real ramUsedMb: 0
   property real ramTotalMb: 1
   property real cpuPct: -1
@@ -24,12 +49,42 @@ BarWidget {
   property real diskUsedB: 0
   property real diskTotalB: 1
 
+  // Detail values (panel-facing; the bar shows none of these)
+  property real buffersKb: 0
+  property real cachedKb: 0
+  property real swapTotalKb: 0
+  property real swapUsedKb: 0
+  property real load1: 0
+  property real load5: 0
+  property real load15: 0
+  property real cpuTempC: -1
+  property real gpuTempC: -1
+  property real nvmeTempC: -1
+  property real gpuBusyPct: -1
+  property real vramUsedB: -1
+  property real vramTotalB: -1
+  property real gttUsedB: -1
+  property real gttTotalB: -1
+  property real gpuPowerMw: -1
+  property real diskReadBps: -1
+  property real diskWriteBps: -1
+  property real diskReadIops: -1
+  property real diskWriteIops: -1
+  property var corePcts: []
+  property var ifRates: ({})
+
   // Previous counters for delta math
   property real prevCpuTotal: -1
   property real prevCpuIdle: -1
   property real prevNetRx: -1
   property real prevNetTx: -1
   property real prevStampMs: 0
+  property var prevCores: []
+  property var prevIf: ({})
+  property real prevDiskRsec: -1
+  property real prevDiskWsec: -1
+  property real prevDiskReads: -1
+  property real prevDiskWrites: -1
 
   readonly property int refreshSeconds: Math.max(1, Math.min(10, Number(setting("refreshSeconds", 2)) || 2))
   readonly property real ramPct: ramTotalMb > 0 ? (ramUsedMb / ramTotalMb) * 100 : 0
@@ -119,6 +174,22 @@ BarWidget {
     root.ramTotalMb = Number(data.ram_total_mb) || 1
     root.diskUsedB = Number(data.disk_used_b) || 0
     root.diskTotalB = Number(data.disk_total_b) || 1
+    root.buffersKb = Number(data.mem_buffers_kb) || 0
+    root.cachedKb = Number(data.mem_cached_kb) || 0
+    root.swapTotalKb = Number(data.swap_total_kb) || 0
+    root.swapUsedKb = Number(data.swap_used_kb) || 0
+    root.load1 = Number(data.load1) || 0
+    root.load5 = Number(data.load5) || 0
+    root.load15 = Number(data.load15) || 0
+    root.cpuTempC = data.cpu_temp_mc >= 0 ? data.cpu_temp_mc / 1000 : -1
+    root.gpuTempC = data.gpu_temp_mc >= 0 ? data.gpu_temp_mc / 1000 : -1
+    root.nvmeTempC = data.nvme_temp_mc >= 0 ? data.nvme_temp_mc / 1000 : -1
+    root.gpuBusyPct = Number(data.gpu_busy_pct)
+    root.vramUsedB = Number(data.vram_used_b)
+    root.vramTotalB = Number(data.vram_total_b)
+    root.gttUsedB = Number(data.gtt_used_b)
+    root.gttTotalB = Number(data.gtt_total_b)
+    root.gpuPowerMw = Number(data.gpu_power_mw)
 
     const now = Date.now()
     const dt = (now - root.prevStampMs) / 1000
@@ -133,6 +204,21 @@ BarWidget {
     }
     root.prevCpuTotal = cTotal
     root.prevCpuIdle = cIdle
+
+    // Per-core % from the cpu_cores array of [total, idle] jiffy pairs.
+    const cores = data.cpu_cores || []
+    if (root.prevCores.length === cores.length && cores.length > 0 && dt > 0.4) {
+      const pcts = []
+      for (let i = 0; i < cores.length; i++) {
+        const dT = cores[i][0] - root.prevCores[i][0]
+        const dI = cores[i][1] - root.prevCores[i][1]
+        pcts.push(dT > 0 ? Math.max(0, Math.min(100, 100 * (1 - dI / dT))) : 0)
+      }
+      root.corePcts = pcts
+    } else if (cores.length > 0) {
+      root.corePcts = new Array(cores.length).fill(0)
+    }
+    root.prevCores = cores
 
     const rx = Number(data.net_rx)
     const tx = Number(data.net_tx)
@@ -149,7 +235,59 @@ BarWidget {
     }
     root.prevNetRx = rx
     root.prevNetTx = tx
+
+    // Per-interface rates for the panel.
+    const ifc = data.net_if || {}
+    const rates = {}
+    for (const name in ifc) {
+      const cur = ifc[name]
+      const prev = root.prevIf[name]
+      if (prev && dt > 0.4) {
+        const d0 = cur[0] - prev[0]
+        const d1 = cur[1] - prev[1]
+        rates[name] = [d0 >= 0 ? d0 / dt : 0, d1 >= 0 ? d1 / dt : 0]
+      } else {
+        rates[name] = [0, 0]
+      }
+    }
+    root.ifRates = rates
+    root.prevIf = ifc
+
+    // Disk IO rates from cumulative diskstats counters.
+    const rsec = Number(data.disk_rsec) || 0
+    const wsec = Number(data.disk_wsec) || 0
+    const reads = Number(data.disk_reads) || 0
+    const writes = Number(data.disk_writes) || 0
+    if (root.prevDiskRsec >= 0 && dt > 0.4) {
+      const dR = rsec - root.prevDiskRsec
+      const dW = wsec - root.prevDiskWsec
+      root.diskReadBps = dR >= 0 ? (dR * 512) / dt : 0
+      root.diskWriteBps = dW >= 0 ? (dW * 512) / dt : 0
+      root.diskReadIops = Math.max(0, (reads - root.prevDiskReads) / dt)
+      root.diskWriteIops = Math.max(0, (writes - root.prevDiskWrites) / dt)
+    }
+    root.prevDiskRsec = rsec
+    root.prevDiskWsec = wsec
+    root.prevDiskReads = reads
+    root.prevDiskWrites = writes
     root.prevStampMs = now
+
+    // ---- History append (always, so the panel opens warm) -----------------
+    if (root.cpuPct >= 0) pushHist(root.histCpu, now, root.cpuPct)
+    pushHist(root.histRam, now, root.ramPct)
+    if (root.netDownBps >= 0) {
+      pushHist(root.histNetDown, now, root.netDownBps)
+      pushHist(root.histNetUp, now, root.netUpBps)
+    }
+    if (root.gpuBusyPct >= 0) pushHist(root.histGpuBusy, now, root.gpuBusyPct)
+    if (root.vramUsedB >= 0 && root.vramTotalB > 0)
+      pushHist(root.histVram, now, (root.vramUsedB / root.vramTotalB) * 100)
+    if (root.gttUsedB >= 0 && root.gttTotalB > 0)
+      pushHist(root.histGtt, now, (root.gttUsedB / root.gttTotalB) * 100)
+    if (root.diskReadBps >= 0) {
+      pushHist(root.histDiskR, now, root.diskReadBps)
+      pushHist(root.histDiskW, now, root.diskWriteBps)
+    }
   }
 
   function refresh() {
@@ -165,6 +303,31 @@ BarWidget {
 
     function refresh(): void {
       root.broadcast("refresh")
+    }
+
+    function status(): string {
+      return JSON.stringify({
+        opened: false,
+        hist: {
+          cpu: root.histCpu.length,
+          ram: root.histRam.length,
+          netDown: root.histNetDown.length,
+          gpuBusy: root.histGpuBusy.length,
+          vram: root.histVram.length,
+          gtt: root.histGtt.length,
+          diskR: root.histDiskR.length
+        },
+        last: {
+          cpuPct: Math.round(root.cpuPct),
+          ramPct: Math.round(root.ramPct),
+          netDownBps: Math.round(root.netDownBps),
+          gpuBusyPct: root.gpuBusyPct,
+          gpuPowerMw: root.gpuPowerMw,
+          cpuTempC: root.cpuTempC,
+          cores: root.corePcts.length,
+          ifaces: Object.keys(root.ifRates)
+        }
+      })
     }
   }
 
