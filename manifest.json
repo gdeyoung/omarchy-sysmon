@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "gdeyoung.sysmon",
   "name": "SysMon",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "author": "gdeyoung",
   "license": "MIT",
-  "description": "Live RAM, CPU, network rate, and whole-disk usage in the bar",
+  "description": "Compact RAM/CPU/net/disk meters that expand into a full performance popup: charts, histograms, rainbow per-core grid, GPU load, disk I/O",
   "kinds": [
     "bar-widget"
   ],
@@ -14,15 +14,17 @@
   },
   "barWidget": {
     "displayName": "SysMon",
-    "description": "RAM (/proc/meminfo), CPU (/proc/stat deltas), net rate (interface counters), whole-disk usage (df + lsblk) — red above 90%",
+    "description": "RAM (/proc/meminfo), CPU (/proc/stat deltas), net rate (interface counters), whole-disk usage (df + lsblk) — click for the detail popup with time-series, histograms, per-core grid and GPU stats",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
-      "refreshSeconds": 2
+      "refreshSeconds": 2,
+      "barMode": "compact"
     },
     "schema": [
-      { "key": "refreshSeconds", "type": "integer", "label": "Refresh interval (seconds)", "min": 1, "max": 10, "step": 1, "defaultValue": 2 }
+      { "key": "refreshSeconds", "type": "integer", "label": "Refresh interval (seconds)", "min": 1, "max": 10, "step": 1, "defaultValue": 2 },
+      { "key": "barMode", "type": "string", "label": "Bar layout", "enum": ["compact", "values"], "defaultValue": "compact" }
     ]
   }
 }
