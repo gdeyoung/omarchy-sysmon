@@ -14,8 +14,15 @@ say()  { printf '%s\n' "$*"; }
 # --- 1. Install files ---------------------------------------------------------
 mkdir -p "$plugin_dir"
 install -m 644 "$repo_dir/BarWidget.qml"   "$plugin_dir/BarWidget.qml"
+install -m 644 "$repo_dir/DetailPopup.qml" "$plugin_dir/DetailPopup.qml"
+install -m 644 "$repo_dir/Sparkline.qml"   "$plugin_dir/Sparkline.qml"
+install -m 644 "$repo_dir/HistBars.qml"    "$plugin_dir/HistBars.qml"
+install -m 644 "$repo_dir/CoreGrid.qml"    "$plugin_dir/CoreGrid.qml"
+install -m 644 "$repo_dir/SysSection.qml"  "$plugin_dir/SysSection.qml"
 install -m 644 "$repo_dir/manifest.json"   "$plugin_dir/manifest.json"
+install -m 644 "$repo_dir/README.md"       "$plugin_dir/README.md"
 install -m 755 "$repo_dir/sysmon.sh"       "$plugin_dir/sysmon.sh"
+install -m 755 "$repo_dir/procprobe.sh"    "$plugin_dir/procprobe.sh"
 say "installed: $plugin_dir"
 
 # --- 2. Probe sanity check ----------------------------------------------------
