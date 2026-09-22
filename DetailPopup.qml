@@ -322,6 +322,122 @@ PopupCard {
           Text { text: w.gttTotalB > 0 ? Math.round(100 * w.gttUsedB / w.gttTotalB) + "%" : "--"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
         }
       }
+
+      // ---- P · Processes ----------------------------------------------------
+      SysSection {
+        Layout.fillWidth: true
+        title: "P · Processes"
+        summary: w.procs.length + " top by " + (w.procSort === "mem" ? "MEM" : "CPU")
+
+        RowLayout {
+          Layout.fillWidth: true
+          spacing: Style.space(6)
+          Text { text: "PID"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
+          Item { Layout.fillWidth: true }
+          Text { text: "sort: "; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
+          Text {
+            text: w.procSort === "mem" ? "MEM%" : "CPU%"
+            color: Color.accent
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            MouseArea { anchors.fill: parent; onClicked: w.procSort = (w.procSort === "cpu" ? "mem" : "cpu") }
+          }
+        }
+
+        Column {
+          Layout.fillWidth: true
+          spacing: 2
+
+          Repeater {
+            model: w.sortedProcs
+
+            Rectangle {
+              id: procRow
+              required property var modelData
+              readonly property bool mine: modelData[1] === "gdeyoung"
+              readonly property bool isTarget: w.killTarget === modelData[0]
+              width: parent ? parent.width : 0
+              height: 22
+              radius: 3
+              color: isTarget ? "#2a2e3a" : (rowMouse.containsMouse ? "#22262e" : "transparent")
+
+              MouseArea {
+                id: rowMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: w.killTarget = (w.killTarget === procRow.modelData[0] ? 0 : procRow.modelData[0])
+              }
+
+              RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 6
+                spacing: Style.space(6)
+
+                Text { text: String(procRow.modelData[0]); color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
+                Text {
+                  Layout.fillWidth: true
+                  text: procRow.modelData[2]
+                  elide: Text.ElideRight
+                  color: procRow.mine ? popup.fg : Qt.darker(popup.fg, 1.6)
+                  font.family: Style.font.family
+                  font.pixelSize: Style.font.caption
+                }
+                Text { text: Number(procRow.modelData[w.procSort === "mem" ? 4 : 3]).toFixed(1) + "%"; color: popup.fg; font.family: Style.font.family; font.pixelSize: Style.font.caption }
+                Rectangle {
+                  visible: procRow.mine
+                  width: 42
+                  height: 16
+                  radius: 3
+                  color: "#3b2430"
+                  Text { anchors.centerIn: parent; text: "kill"; color: "#f7768e"; font.family: Style.font.family; font.pixelSize: Style.font.caption }
+                  MouseArea { anchors.fill: parent; onClicked: w.killTarget = procRow.modelData[0] }
+                }
+              }
+            }
+          }
+        }
+
+        // Inline confirm strip (no nested dialog inside the Flickable).
+        Rectangle {
+          Layout.fillWidth: true
+          visible: w.killTarget > 0
+          height: 40
+          radius: 4
+          color: "#2a1e24"
+          RowLayout {
+            anchors.fill: parent
+            anchors.margins: 8
+            spacing: Style.space(8)
+            Text {
+              Layout.fillWidth: true
+              text: "Kill " + w.killName + " (" + w.killTarget + ")?"
+              elide: Text.ElideRight
+              color: popup.fg
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+            Rectangle {
+              width: 96; height: 22; radius: 3; color: "#3b2430"
+              Text { anchors.centerIn: parent; text: w.killAlive ? "Force kill (9)" : "Kill (TERM)"; color: "#f7768e"; font.family: Style.font.family; font.pixelSize: Style.font.caption }
+              MouseArea { anchors.fill: parent; onClicked: w.doKill(w.killTarget, w.killAlive ? 9 : 15) }
+            }
+            Rectangle {
+              width: 60; height: 22; radius: 3; color: "#232733"
+              Text { anchors.centerIn: parent; text: "Cancel"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
+              MouseArea { anchors.fill: parent; onClicked: w.killTarget = 0 }
+            }
+          }
+        }
+      }
+
+      Text {
+        Layout.topMargin: Style.space(4)
+        text: "click a section header to collapse — " + w.histMax + " sample history"
+        color: popup.muted
+        font.family: Style.font.family
+        font.pixelSize: Style.font.caption
+      }
     }
   }
 }

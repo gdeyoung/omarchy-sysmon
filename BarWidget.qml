@@ -75,6 +75,45 @@ BarWidget {
   property var corePcts: []
   property var ifRates: ({})
 
+  // ---- Processes (popup only) ----------------------------------------------
+  property var procs: []            // [[pid,user,comm,pcpu,pmem,state],...]
+  property string procSort: "cpu"
+  property int killTarget: 0
+  readonly property var killRow: {
+    for (let i = 0; i < procs.length; i++)
+      if (procs[i][0] === killTarget) return procs[i]
+    return null
+  }
+  readonly property string killName: killRow ? killRow[2] : ""
+  readonly property bool killAlive: killRow !== null
+
+  readonly property var sortedProcs: {
+    const col = procSort === "mem" ? 4 : 3
+    const arr = procs.slice()
+    arr.sort((a, b) => Number(b[col]) - Number(a[col]))
+    return arr
+  }
+
+  function doKill(pid, sig) {
+    Quickshell.execDetached(["kill", "-" + sig, String(pid)])
+    killTarget = 0
+    Qt.callLater(refreshProcs)
+  }
+
+  function refreshProcs() {
+    if (!procProbe.running) procProbe.running = true
+  }
+
+  function applyProcs(line) {
+    let data
+    try {
+      data = JSON.parse(String(line).trim())
+    } catch (e) {
+      return
+    }
+    if (data && data.procs) procs = data.procs
+  }
+
   // Previous counters for delta math
   property real prevCpuTotal: -1
   property real prevCpuIdle: -1
@@ -348,7 +387,8 @@ BarWidget {
           gpuPowerMw: root.gpuPowerMw,
           cpuTempC: root.cpuTempC,
           cores: root.corePcts.length,
-          ifaces: Object.keys(root.ifRates)
+          ifaces: Object.keys(root.ifRates),
+          procs: root.procs.length
         }
       })
     }
@@ -361,6 +401,24 @@ BarWidget {
       waitForEnd: true
       onStreamFinished: root.apply(text)
     }
+  }
+
+  Process {
+    id: procProbe
+    command: ["/bin/bash", Qt.resolvedUrl("procprobe.sh").toString().replace("file://", "")]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.applyProcs(text)
+    }
+  }
+
+  Timer {
+    // Process table refresh: only while the popup is open.
+    interval: 2000
+    running: popupOpen
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.refreshProcs()
   }
 
   Timer {
