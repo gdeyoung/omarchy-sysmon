@@ -74,6 +74,7 @@ BarWidget {
   property real diskWriteIops: -1
   property var corePcts: []
   property var ifRates: ({})
+  property var vols: []              // [{mnt, usedB, sizeB, pct}, ...] from probe vols
 
   // ---- Processes (popup only) ----------------------------------------------
   property var procs: []            // [[pid,user,comm,pcpu,pmem,state],...]
@@ -112,6 +113,17 @@ BarWidget {
       return
     }
     if (data && data.procs) procs = data.procs
+  }
+
+  function applyVols(data) {
+    const v = data.vols || []
+    const out = []
+    for (let i = 0; i < v.length; i++) {
+      const used = Number(v[i][1]) || 0
+      const size = Number(v[i][2]) || 1
+      out.push({ mnt: v[i][0], usedB: used, sizeB: size, pct: size > 0 ? (used / size) * 100 : 0 })
+    }
+    vols = out
   }
 
   // Previous counters for delta math
@@ -219,6 +231,7 @@ BarWidget {
     root.ramTotalMb = Number(data.ram_total_mb) || 1
     root.diskUsedB = Number(data.disk_used_b) || 0
     root.diskTotalB = Number(data.disk_total_b) || 1
+    root.applyVols(data)
     root.buffersKb = Number(data.mem_buffers_kb) || 0
     root.cachedKb = Number(data.mem_cached_kb) || 0
     root.swapTotalKb = Number(data.swap_total_kb) || 0
@@ -366,10 +379,15 @@ BarWidget {
     function open(): void { detailPopup.open = true }
     function close(): void { detailPopup.close() }
     function toggle(): void { detailPopup.open ? detailPopup.close() : detailPopup.open = true }
+    function tab(name: string): void { detailPopup.tab = name }
 
     function status(): string {
       return JSON.stringify({
         opened: root.popupOpen,
+        tab: detailPopup.tab,
+        popupH: detailPopup.height,
+        contentH: detailPopup.contentHeight,
+        colH: detailPopup.scrollColH,
         hist: {
           cpu: root.histCpu.length,
           ram: root.histRam.length,
@@ -388,7 +406,8 @@ BarWidget {
           cpuTempC: root.cpuTempC,
           cores: root.corePcts.length,
           ifaces: Object.keys(root.ifRates),
-          procs: root.procs.length
+          procs: root.procs.length,
+          vols: root.vols.map(v => v.mnt + " " + Math.round(v.pct) + "%")
         }
       })
     }

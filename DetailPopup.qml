@@ -22,11 +22,21 @@ PopupCard {
   // reopen. The host drives open imperatively; this syncs state back.
   onOpenChanged: host.popupOpen = open
 
+  // debug: expose layout heights to IPC status (colH = active tab content)
+  readonly property real scrollColH: scrollCol ? scrollCol.implicitHeight : 0
+
   contentWidth: popup.fittedContentWidth(Style.space(560))
-  contentHeight: popup.fittedContentHeight(scrollCol.implicitHeight, Style.space(800))
+  // Height follows the ACTIVE tab's content (hidden sections don't reserve
+  // space in ColumnLayout), bounded by available screen — no fixed cap, so
+  // nothing sits below the fold. Flickable stays as overflow safety.
+  contentHeight: popup.fittedContentHeight(scrollCol.implicitHeight)
 
   readonly property color fg: host && host.bar ? host.bar.foreground : Color.foreground
   readonly property color muted: Qt.darker(popup.fg, 1.5)
+
+  // Tabs: perf (M C G N) · disk (D + volumes) · procs (table). Each tab's
+  // content fits the popup height cap — nothing lives below the fold.
+  property string tab: "perf"
 
   function tempColor(c) {
     if (c >= 85) return "#f7768e"
@@ -88,9 +98,44 @@ PopupCard {
         }
       }
 
+      // ---- Tab bar ----------------------------------------------------------
+      Row {
+        Layout.fillWidth: true
+        spacing: 6
+
+        component TabBtn: Rectangle {
+          id: tb
+          required property string key
+          required property string label
+          readonly property bool active: popup.tab === tb.key
+          width: tabText.implicitWidth + 20
+          height: 24
+          radius: 5
+          color: active ? "#31353f" : "transparent"
+          border.width: active ? 1 : 0
+          border.color: "#414860"
+
+          Text {
+            id: tabText
+            anchors.centerIn: parent
+            text: tb.label
+            color: tb.active ? popup.fg : popup.muted
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+            font.bold: tb.active
+          }
+          MouseArea { anchors.fill: parent; onClicked: popup.tab = tb.key }
+        }
+
+        TabBtn { key: "perf"; label: "Performance" }
+        TabBtn { key: "disk"; label: "Disks" }
+        TabBtn { key: "procs"; label: "Processes" }
+      }
+
       // ---- M · Memory -----------------------------------------------------
       SysSection {
         Layout.fillWidth: true
+        visible: popup.tab === "perf"
         title: "M · Memory"
         summary: w.fmtGb(w.ramUsedMb) + " / " + w.fmtGb(w.ramTotalMb)
 
@@ -135,6 +180,7 @@ PopupCard {
       // ---- C · CPU ---------------------------------------------------------
       SysSection {
         Layout.fillWidth: true
+        visible: popup.tab === "perf"
         title: "C · CPU"
         summary: w.cpuPct < 0 ? "--%" : Math.round(w.cpuPct) + "%"
 
@@ -178,88 +224,10 @@ PopupCard {
         }
       }
 
-      // ---- N · Network -----------------------------------------------------
-      SysSection {
-        Layout.fillWidth: true
-        title: "N · Network"
-        summary: w.netDownBps < 0 ? "--" : "↓" + w.fmtRate(w.netDownBps) + " ↑" + w.fmtRate(w.netUpBps)
-
-        Sparkline {
-          Layout.fillWidth: true
-          Layout.preferredHeight: 46
-          series: w.histNetDown
-          seriesB: w.histNetUp
-          autoScale: true
-          stroke: "#7aa2f7"          // down = blue
-          strokeB: "#bb9af7"         // up = violet
-          fill: "#7aa2f7"
-        }
-        // Per-interface live rates (names + arrows, muted).
-        Column {
-          Layout.fillWidth: true
-          spacing: 2
-          Repeater {
-            model: Object.keys(w.ifRates)
-            Text {
-              required property string modelData
-              readonly property var r: w.ifRates[modelData]
-              text: modelData + "   ↓" + w.fmtRate(r ? r[0] : 0) + "   ↑" + w.fmtRate(r ? r[1] : 0)
-              color: popup.muted
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-            }
-          }
-        }
-        Text {
-          text: "histogram: log-scale activity, 1 Gbit/s = right edge"
-          color: popup.muted
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-        }
-        HistBars {
-          series: w.histNetDown
-          logScale: true
-          activeColor: "#7aa2f7"
-        }
-      }
-
-      // ---- D · Disk --------------------------------------------------------
-      SysSection {
-        Layout.fillWidth: true
-        title: "D · Disk"
-        summary: w.fmtDisk(w.diskUsedB) + " / " + w.fmtDisk(w.diskTotalB)
-
-        Sparkline {
-          Layout.fillWidth: true
-          Layout.preferredHeight: 36
-          series: w.histDiskR
-          stroke: "#e5c07b"
-          fill: "#e5c07b"
-          autoScale: true
-        }
-        Sparkline {
-          Layout.fillWidth: true
-          Layout.preferredHeight: 36
-          series: w.histDiskW
-          stroke: "#f7768e"
-          fill: "#f7768e"
-          autoScale: true
-        }
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(12)
-          Text { text: "R " + w.fmtRate(Math.max(0, w.diskReadBps)); color: popup.fg; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Text { text: "W " + w.fmtRate(Math.max(0, w.diskWriteBps)); color: popup.fg; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Text { text: Math.round(Math.max(0, w.diskReadIops)) + "/" + Math.round(Math.max(0, w.diskWriteIops)) + " iops"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Item { Layout.fillWidth: true }
-          Text { text: Math.round(w.diskPct) + "% full"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-        }
-      }
-
       // ---- G · GPU ---------------------------------------------------------
       SysSection {
         Layout.fillWidth: true
-        visible: w.gpuBusyPct >= 0
+        visible: w.gpuBusyPct >= 0 && popup.tab === "perf"
         title: "G · GPU"
         summary: w.gpuBusyPct < 0 ? "--" : Math.round(w.gpuBusyPct) + "%"
 
@@ -270,7 +238,7 @@ PopupCard {
           stroke: "#7aa2f7"
           fill: "#7aa2f7"
         }
-        HistBars { series: w.histGpuBusy }
+        HistBars { series: w.histGpuBusy; activeColor: "#7aa2f7" }
         RowLayout {
           Layout.fillWidth: true
           spacing: Style.space(12)
@@ -319,9 +287,147 @@ PopupCard {
         }
       }
 
+      // ---- N · Network -----------------------------------------------------
+      SysSection {
+        Layout.fillWidth: true
+        visible: popup.tab === "perf"
+        title: "N · Network"
+        summary: w.netDownBps < 0 ? "--" : "↓" + w.fmtRate(w.netDownBps) + " ↑" + w.fmtRate(w.netUpBps)
+
+        Sparkline {
+          Layout.fillWidth: true
+          Layout.preferredHeight: 46
+          series: w.histNetDown
+          seriesB: w.histNetUp
+          autoScale: true
+          stroke: "#7aa2f7"          // down = blue
+          strokeB: "#bb9af7"         // up = violet
+          fill: "#7aa2f7"
+        }
+        // Per-interface live rates (names + arrows, muted).
+        Column {
+          Layout.fillWidth: true
+          spacing: 2
+          Repeater {
+            model: Object.keys(w.ifRates)
+            Text {
+              required property string modelData
+              readonly property var r: w.ifRates[modelData]
+              text: modelData + "   ↓" + w.fmtRate(r ? r[0] : 0) + "   ↑" + w.fmtRate(r ? r[1] : 0)
+              color: popup.muted
+              font.family: Style.font.family
+              font.pixelSize: Style.font.caption
+            }
+          }
+        }
+        Text {
+          text: "histogram: log-scale activity, 1 Gbit/s = right edge"
+          color: popup.muted
+          font.family: Style.font.family
+          font.pixelSize: Style.font.caption
+        }
+        HistBars {
+          series: w.histNetDown
+          logScale: true
+          activeColor: "#7aa2f7"
+        }
+      }
+
+      // ---- D · Disk --------------------------------------------------------
+      SysSection {
+        Layout.fillWidth: true
+        visible: popup.tab === "disk"
+        title: "D · Disk"
+        summary: w.fmtDisk(w.diskUsedB) + " / " + w.fmtDisk(w.diskTotalB)
+
+        Sparkline {
+          Layout.fillWidth: true
+          Layout.preferredHeight: 36
+          series: w.histDiskR
+          stroke: "#e5c07b"
+          fill: "#e5c07b"
+          autoScale: true
+        }
+        Sparkline {
+          Layout.fillWidth: true
+          Layout.preferredHeight: 36
+          series: w.histDiskW
+          stroke: "#f7768e"
+          fill: "#f7768e"
+          autoScale: true
+        }
+        RowLayout {
+          Layout.fillWidth: true
+          spacing: Style.space(12)
+          Text { text: "R " + w.fmtRate(Math.max(0, w.diskReadBps)); color: popup.fg; font.family: Style.font.family; font.pixelSize: Style.font.caption }
+          Text { text: "W " + w.fmtRate(Math.max(0, w.diskWriteBps)); color: popup.fg; font.family: Style.font.family; font.pixelSize: Style.font.caption }
+          Text { text: Math.round(Math.max(0, w.diskReadIops)) + "/" + Math.round(Math.max(0, w.diskWriteIops)) + " iops"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
+          Item { Layout.fillWidth: true }
+          Text { text: Math.round(w.diskPct) + "% full"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
+        }
+
+        // Fuel gauges: one per real mounted volume, deduped by device.
+        Column {
+          Layout.fillWidth: true
+          spacing: 6
+
+          Repeater {
+            model: w.vols
+
+            RowLayout {
+              id: volRow
+              required property var modelData
+              width: parent ? parent.width : 0
+              spacing: Style.space(8)
+
+              Text {
+                Layout.preferredWidth: 76
+                text: volRow.modelData.mnt
+                elide: Text.ElideMiddle
+                color: popup.fg
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+              }
+              Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 10
+                radius: 5
+                color: "#232733"
+                Rectangle {
+                  anchors.left: parent.left
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: parent.width * Math.min(1, volRow.modelData.pct / 100)
+                  height: parent.height
+                  radius: 5
+                  color: popup.levelColor(volRow.modelData.pct)
+                }
+              }
+              Text {
+                Layout.preferredWidth: 96
+                horizontalAlignment: Text.AlignRight
+                text: w.fmtDisk(volRow.modelData.usedB) + "/" + w.fmtDisk(volRow.modelData.sizeB)
+                color: popup.muted
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+              }
+              Text {
+                Layout.preferredWidth: 34
+                horizontalAlignment: Text.AlignRight
+                text: Math.round(volRow.modelData.pct) + "%"
+                color: popup.levelColor(volRow.modelData.pct)
+                font.family: Style.font.family
+                font.pixelSize: Style.font.caption
+                font.bold: true
+              }
+            }
+          }
+        }
+      }
+
       // ---- P · Processes ----------------------------------------------------
       SysSection {
         Layout.fillWidth: true
+        visible: popup.tab === "procs"
         title: "P · Processes"
         summary: w.procs.length + " top by " + (w.procSort === "mem" ? "MEM" : "CPU")
 

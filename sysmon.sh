@@ -51,10 +51,15 @@ for iface in /sys/class/net/*; do
   if_json="${if_json}${if_json:+,}\"${name}\":[${rx},${tx}]"
 done
 
-# --- Disk: whole-disk size + fs used + cumulative IO counters -----------------
+# --- Disk: mounted volumes + whole-disk size + fs used + IO counters -------
+# vols: real local filesystems only (tmpfs/devtmpfs/efivarfs/overlay excluded
+# via df -x), deduped by source device — btrfs subvolume mounts (/home,
+# /var/log, ...) share one device and must show as one gauge. Format:
+#   "vols":[["/",usedB,sizeB],["/boot",usedB,sizeB],...]
 disk_used=0
 disk_total=0
 disk_dev=""
+vols_json=""
 resolve_disk() {  # $1 = device name; echoes whole-disk name (e.g. nvme0n1)
   local cur="/dev/$1" parent
   case "$1" in
@@ -68,6 +73,11 @@ resolve_disk() {  # $1 = device name; echoes whole-disk name (e.g. nvme0n1)
   done
   basename "$cur"
 }
+vols_json=$(df -B1 --local \
+    -x tmpfs -x devtmpfs -x efivarfs -x overlay -x squashfs \
+    --output=source,fstype,used,size,target 2>/dev/null | awk '
+    NR > 1 { tgt = $5; for (i = 6; i <= NF; i++) tgt = tgt " " $i }
+    NR > 1 && !seen[$1]++ { printf "%s[\"%s\",%s,%s]", (n++ ? "," : ""), tgt, $3, $4 }')
 if src=$(findmnt -no SOURCE /home 2>/dev/null); then
   src="${src%%\[*}"                      # strip btrfs subvol: /dev/mapper/root[/@home]
   if read -r u _ < <(df -B1 --output=used,size "$src" 2>/dev/null | tail -n 1); then
@@ -120,10 +130,10 @@ for d in /sys/class/hwmon/hwmon*; do
   fi
 done
 
-printf '{"ram_used_mb":%d,"ram_total_mb":%d,"mem_buffers_kb":%s,"mem_cached_kb":%s,"swap_total_kb":%s,"swap_used_kb":%s,"zswapped_kb":%s,"cpu_total":%s,"cpu_idle":%s,"cpu_cores":[%s],"load1":%s,"load5":%s,"load15":%s,"net_rx":%s,"net_tx":%s,"net_if":{%s},"disk_used_b":%s,"disk_total_b":%s,"disk_reads":%s,"disk_rsec":%s,"disk_writes":%s,"disk_wsec":%s,"cpu_temp_mc":%s,"gpu_temp_mc":%s,"nvme_temp_mc":%s,"gpu_busy_pct":%s,"vram_used_b":%s,"vram_total_b":%s,"gtt_used_b":%s,"gtt_total_b":%s,"gpu_power_mw":%s}\n' \
+printf '{"ram_used_mb":%d,"ram_total_mb":%d,"mem_buffers_kb":%s,"mem_cached_kb":%s,"swap_total_kb":%s,"swap_used_kb":%s,"zswapped_kb":%s,"cpu_total":%s,"cpu_idle":%s,"cpu_cores":[%s],"load1":%s,"load5":%s,"load15":%s,"net_rx":%s,"net_tx":%s,"net_if":{%s},"disk_used_b":%s,"disk_total_b":%s,"vols":[%s],"disk_reads":%s,"disk_rsec":%s,"disk_writes":%s,"disk_wsec":%s,"cpu_temp_mc":%s,"gpu_temp_mc":%s,"nvme_temp_mc":%s,"gpu_busy_pct":%s,"vram_used_b":%s,"vram_total_b":%s,"gtt_used_b":%s,"gtt_total_b":%s,"gpu_power_mw":%s}\n' \
   "$ram_used" "$mem_total" "$mem_buffers" "$mem_cached" "$swap_total" "$swap_used" "$zswapped" \
   "$cpu_total" "$cpu_idle" "$cores_json" "$load1" "$load5" "$load15" \
   "$net_rx" "$net_tx" "$if_json" \
-  "$disk_used" "$disk_total" "$disk_reads" "$disk_rsec" "$disk_writes" "$disk_wsec" \
+  "$disk_used" "$disk_total" "$vols_json" "$disk_reads" "$disk_rsec" "$disk_writes" "$disk_wsec" \
   "$cpu_temp" "$gpu_temp" "$nvme_temp" \
   "$gpu_busy" "$vram_used" "$vram_total" "$gtt_used" "$gtt_total" "$gpu_power"
