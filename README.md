@@ -7,23 +7,29 @@ bar (compact):   ▎M  ▎C  ▎N  ▎D        ← click to open
                  └ hover for values
 ```
 
-![SysMon — bar widget and popup tabs](preview.png)
-
 ## Screenshots
 
-**The bar** — one letter + one meter per stat, numbers in the hover tooltip. Zero noise until you click:
+### The bar
+
+One letter, one 5px meter per stat — the numbers live in the hover tooltip. Zero noise until you click:
 
 ![bar widget — compact M C N D strip](sysmon-bar.png)
 
-**Performance tab** — memory, CPU (total + busiest core), GPU load with power/VRAM/GTT, and per-interface network, all live-scrolling:
+### Performance tab
+
+Everything, live-scrolling: memory with buffers/cache/swap breakdown, CPU as total % (green) with the busiest core overlaid (violet), GPU load with power draw and VRAM/GTT meters, and per-interface network rates. Ring buffers run whether or not the popup is open, so it opens with minutes of warm history already drawn:
 
 ![Performance tab](sysmon-performance.png)
 
-**Disks tab** — read/write rates, IOPS, and a fuel gauge for every mounted volume:
+### Disks tab
+
+Read/write rate charts and IOPS up top; below, a fuel gauge for every mounted volume — local filesystems only, deduped by source device, so multi-mountpoint btrfs shows once:
 
 ![Disks tab](sysmon-disks.png)
 
-**Processes tab** — top processes by CPU or memory, with a two-step kill (TERM, then Force kill if it survives). Only your own processes are killable:
+### Processes tab
+
+The task-manager view: top processes sorted by CPU or memory (click the header to flip the sort), hover affordances on every control, and a two-step kill — TERM first, and if the process survives the next refresh the button becomes Force kill. Only processes you own get a kill button:
 
 ![Processes tab](sysmon-processes.png)
 
