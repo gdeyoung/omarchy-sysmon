@@ -17,7 +17,10 @@ PopupCard {
   anchorItem: host
   bar: host.bar
   owner: host
-  open: host.popupOpen
+  // No `open:` binding on purpose: PopupCard's outside-click close assigns
+  // to `open`, which would break a binding and leave the popup unable to
+  // reopen. The host drives open imperatively; this syncs state back.
+  onOpenChanged: host.popupOpen = open
 
   contentWidth: popup.fittedContentWidth(Style.space(560))
   contentHeight: popup.fittedContentHeight(scrollCol.implicitHeight, Style.space(800))
@@ -172,13 +175,6 @@ PopupCard {
           color: popup.muted
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
-        }
-        // Rainbow per-core histogram.
-        CoreGrid {
-          Layout.fillWidth: true
-          corePcts: w.corePcts
-          perRow: 12
-          barH: 30
         }
       }
 

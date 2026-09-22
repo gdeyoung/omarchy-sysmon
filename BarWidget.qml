@@ -363,9 +363,9 @@ BarWidget {
       root.broadcast("refresh")
     }
 
-    function open(): void { root.popupOpen = true }
-    function close(): void { root.popupOpen = false }
-    function toggle(): void { root.popupOpen = !root.popupOpen }
+    function open(): void { detailPopup.open = true }
+    function close(): void { detailPopup.close() }
+    function toggle(): void { detailPopup.open ? detailPopup.close() : detailPopup.open = true }
 
     function status(): string {
       return JSON.stringify({
@@ -636,8 +636,12 @@ BarWidget {
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
     onClicked: (mouse) => {
-      if (mouse.button === Qt.LeftButton) root.popupOpen = !root.popupOpen
-      else root.refresh()
+      if (mouse.button === Qt.LeftButton) {
+        if (detailPopup.open) detailPopup.close()
+        else detailPopup.open = true
+      } else {
+        root.refresh()
+      }
     }
     onEntered: if (root.bar) root.bar.showTooltip(root, root.tooltip)
     onExited: if (root.bar) root.bar.hideTooltip(root)
