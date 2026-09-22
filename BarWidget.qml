@@ -33,6 +33,8 @@ BarWidget {
   property var histGtt: []
   property var histDiskR: []
   property var histDiskW: []
+  property var histCoreAvg: []      // mean of per-core % (kept for status)
+  property var histCoreMax: []      // busiest core % — violet overlay line
 
   function pushHist(arr, t, v) {
     arr.push({ t: t, v: v })
@@ -96,6 +98,7 @@ BarWidget {
       100 * Math.log(1 + netDownBps + netUpBps) / Math.log(1 + 125000000)
 
   function fmtGb(mb) { return (mb / 1024).toFixed(1) + "G" }
+  function fmtGbB(kb) { return (kb / 1048576).toFixed(1) + "G" }
   function fmtDisk(b) { return Math.round(b / 1073741824) + "G" }
   function fmtRate(bps) {
     if (bps < 0) return "0K"
@@ -277,6 +280,15 @@ BarWidget {
 
     // ---- History append (always, so the panel opens warm) -----------------
     if (root.cpuPct >= 0) pushHist(root.histCpu, now, root.cpuPct)
+    if (root.corePcts.length > 0) {
+      let sum = 0, mx = 0
+      for (let i = 0; i < root.corePcts.length; i++) {
+        sum += root.corePcts[i]
+        if (root.corePcts[i] > mx) mx = root.corePcts[i]
+      }
+      pushHist(root.histCoreAvg, now, sum / root.corePcts.length)
+      pushHist(root.histCoreMax, now, mx)
+    }
     pushHist(root.histRam, now, root.ramPct)
     if (root.netDownBps >= 0) {
       pushHist(root.histNetDown, now, root.netDownBps)
@@ -302,6 +314,9 @@ BarWidget {
     : (root.compactMode ? (compactRow.implicitWidth + 12) : (row.implicitWidth + 16))
   implicitHeight: root.vertical ? (col.implicitHeight + 12) : root.barSize
 
+  // ---- Detail popup state --------------------------------------------------
+  property bool popupOpen: false
+
   IpcHandler {
     target: "gdeyoung.sysmon"
 
@@ -309,9 +324,13 @@ BarWidget {
       root.broadcast("refresh")
     }
 
+    function open(): void { root.popupOpen = true }
+    function close(): void { root.popupOpen = false }
+    function toggle(): void { root.popupOpen = !root.popupOpen }
+
     function status(): string {
       return JSON.stringify({
-        opened: false,
+        opened: root.popupOpen,
         hist: {
           cpu: root.histCpu.length,
           ram: root.histRam.length,
@@ -345,7 +364,8 @@ BarWidget {
   }
 
   Timer {
-    interval: root.refreshSeconds * 1000
+    // 1s while the popup is open (smooth charts), refreshSeconds otherwise.
+    interval: (popupOpen ? 1000 : refreshSeconds * 1000)
     running: true
     repeat: true
     triggeredOnStart: true
@@ -557,8 +577,16 @@ BarWidget {
     anchors.fill: parent
     hoverEnabled: true
     acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-    onClicked: root.refresh()
+    onClicked: (mouse) => {
+      if (mouse.button === Qt.LeftButton) root.popupOpen = !root.popupOpen
+      else root.refresh()
+    }
     onEntered: if (root.bar) root.bar.showTooltip(root, root.tooltip)
     onExited: if (root.bar) root.bar.hideTooltip(root)
+  }
+
+  DetailPopup {
+    id: detailPopup
+    host: root
   }
 }
