@@ -166,7 +166,6 @@ PopupCard {
           stroke: "#e0af68"          // amber — memory's color
           fill: "#e0af68"
         }
-        HistBars { series: w.histRam; activeColor: "#e0af68" }
         RowLayout {
           Layout.fillWidth: true
           spacing: Style.space(12)
@@ -214,7 +213,6 @@ PopupCard {
           strokeB: "#bb9af7"
           fill: "#9ece6a"
         }
-        HistBars { series: w.histCpu; activeColor: "#9ece6a" }
         Text {
           text: "load " + w.load1.toFixed(2) + " / " + w.load5.toFixed(2) + " / " + w.load15.toFixed(2)
             + "   ·   " + w.corePcts.length + " threads"
@@ -238,7 +236,6 @@ PopupCard {
           stroke: "#7aa2f7"
           fill: "#7aa2f7"
         }
-        HistBars { series: w.histGpuBusy; activeColor: "#7aa2f7" }
         RowLayout {
           Layout.fillWidth: true
           spacing: Style.space(12)
@@ -325,11 +322,6 @@ PopupCard {
           color: popup.muted
           font.family: Style.font.family
           font.pixelSize: Style.font.caption
-        }
-        HistBars {
-          series: w.histNetDown
-          logScale: true
-          activeColor: "#7aa2f7"
         }
       }
 
