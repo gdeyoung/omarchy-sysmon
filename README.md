@@ -7,9 +7,25 @@ bar (compact):   ▎M  ▎C  ▎N  ▎D        ← click to open
                  └ hover for values
 ```
 
-![SysMon popup — three tabs](preview.png)
+![SysMon — bar widget and popup tabs](preview.png)
 
-Per tab: [Performance](sysmon-performance.png) · [Disks](sysmon-disks.png) · [Processes](sysmon-processes.png)
+## Screenshots
+
+**The bar** — one letter + one meter per stat, numbers in the hover tooltip. Zero noise until you click:
+
+![bar widget — compact M C N D strip](sysmon-bar.png)
+
+**Performance tab** — memory, CPU (total + busiest core), GPU load with power/VRAM/GTT, and per-interface network, all live-scrolling:
+
+![Performance tab](sysmon-performance.png)
+
+**Disks tab** — read/write rates, IOPS, and a fuel gauge for every mounted volume:
+
+![Disks tab](sysmon-disks.png)
+
+**Processes tab** — top processes by CPU or memory, with a two-step kill (TERM, then Force kill if it survives). Only your own processes are killable:
+
+![Processes tab](sysmon-processes.png)
 
 Forked from [vm.sysmem](https://github.com/jhonoryza/omarchy-sysmem) by jhonoryza (MIT).
 
