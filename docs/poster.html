@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SysMon — marketplace preview</title>
+<style>
+  /* Display+ house style: near-black canvas, one accent, mono body,
+     big sans headline, left text column + right panel column. */
+  :root {
+    --bg: #0a0c10;
+    --ink: #f2f5fa;
+    --body: #aab3c2;
+    --dim: #67707f;
+    --accent: #9ece6a;
+    --accent-soft: rgba(158,206,106,.13);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 2000px; height: 1125px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(1100px 700px at 88% 108%, rgba(158,206,106,.15), transparent 60%),
+      radial-gradient(900px 600px at -5% -10%, rgba(158,206,106,.06), transparent 55%),
+      var(--bg);
+    font-family: 'JetBrains Mono', 'JetBrainsMono Nerd Font', ui-monospace, monospace;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    padding: 0 110px;
+  }
+  .left { width: 980px; flex: none; margin-right: 40px; }
+  .crumb { font-size: 21px; color: var(--accent); letter-spacing: .22em; }
+  h1 {
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    font-size: 74px; font-weight: 750; line-height: 1.08;
+    letter-spacing: -0.015em; margin: 30px 0 26px;
+  }
+  .sub { font-size: 24px; color: var(--body); line-height: 1.6; max-width: 880px; }
+  .features {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px 44px; margin-top: 52px; max-width: 920px;
+  }
+  .features div { font-size: 19.5px; color: var(--body); line-height: 1.45; }
+  .features div::before { content: "\25C6  "; color: var(--accent); font-size: 13px; vertical-align: 2px; }
+  .foot {
+    position: absolute; left: 110px; bottom: 58px; right: 910px;
+    border-top: 1px solid rgba(255,255,255,.10); padding-top: 26px;
+    font-size: 19px; color: var(--dim); display: flex; justify-content: space-between;
+  }
+  .right { position: relative; flex: none; width: 760px; height: 100%; }
+  .panelshot {
+    position: absolute; border-radius: 22px;
+    box-shadow: 0 40px 110px rgba(0,0,0,.65), 0 0 0 1px rgba(158,206,106,.32);
+  }
+  #p1 { width: 500px; left: 200px; top: 40px;  z-index: 3; }  /* Performance (hero) 500x636, top-right */
+  #p2 { width: 340px; left: 0px;   top: 700px; z-index: 2; }  /* Disks 340x264, only its corner tucks under hero; tabs clear at y>690 */
+  #p3 { width: 360px; left: 370px; top: 700px; z-index: 4; }  /* Processes 360x336, bottom-right */
+  #p4 { width: 290px; left: 30px;  top: 830px; z-index: 5; }  /* Bar strip 290x62, bottom-left */
+</style>
+</head>
+<body>
+  <div class="left">
+    <div class="crumb">SYSMON / GDEYOUNG</div>
+    <h1>A task manager that lives in your Omarchy bar.</h1>
+    <div class="sub">Four letters — M C N D — one 5px meter each, zero noise until you
+    click. Then a tabbed popup opens with minutes of warm history already drawn:
+    performance charts, GPU power and VRAM, disk gauges, and a killable process table.</div>
+    <div class="features">
+      <div>One letter + one 5px meter per stat</div>
+      <div>Charts open with warm history — buffers always run</div>
+      <div>GPU load, power draw, VRAM &amp; GTT meters</div>
+      <div>Per-volume disk gauges, deduped by device</div>
+      <div>Two-step kill — TERM, then Force kill</div>
+      <div>CPU / GPU / NVMe temps, threshold-colored</div>
+      <div>Sort by CPU or memory with one click</div>
+      <div>barMode: values restores full bar readouts</div>
+    </div>
+  </div>
+  <div class="right">
+    <img class="panelshot" id="p1" src="/tmp/sysmon_shots/panel-performance.png">
+    <img class="panelshot" id="p2" src="/tmp/sysmon_shots/panel-disks.png">
+    <img class="panelshot" id="p3" src="/tmp/sysmon_shots/panel-processes.png">
+    <img class="panelshot" id="p4" src="/tmp/sysmon_shots/panel-bar.png">
+  </div>
+  <div class="foot">
+    <span>System stats for Hyprland, right inside Omarchy.</span>
+    <span>gdeyoung/omarchy-sysmon</span>
+  </div>
+</body>
+</html>

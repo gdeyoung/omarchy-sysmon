@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SysMon — synthetic panel mockups</title>
+<style>
+  /* SysMon panel mockup — Omarchy dark shell theme, accent green.
+     All data synthetic: no real hostnames, interfaces, or process lists. */
+  :root {
+    --bg: #0b0d12;
+    --panel: #10131a;
+    --panel2: #161a24;
+    --border: rgba(255,255,255,.09);
+    --ink: #e6e9f0;
+    --muted: #8b93a7;
+    --dim: #5c6478;
+    --accent: #9ece6a;
+    --green: #9ece6a;
+    --amber: #e0af68;
+    --violet: #bb9af7;
+    --blue: #7aa2f7;
+    --cyan: #7dcfff;
+    --red: #f7768e;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg);
+    font-family: 'JetBrains Mono', 'JetBrainsMono Nerd Font', ui-monospace, monospace;
+    color: var(--ink);
+    padding: 28px;
+    display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap;
+  }
+  .panel {
+    width: 400px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 14px;
+    overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,.5);
+  }
+  .tabs { display: flex; padding: 10px 12px 0; gap: 2px; border-bottom: 1px solid var(--border); }
+  .tab { font-size: 12px; color: var(--muted); padding: 8px 10px 9px; border-radius: 8px 8px 0 0; }
+  .tab.active { color: var(--ink); background: var(--panel2); }
+  .body { padding: 12px 14px 14px; }
+  .temps { display: flex; gap: 14px; font-size: 11px; color: var(--muted); padding: 2px 2px 8px; }
+  .temps b { color: var(--green); font-weight: 600; }
+  .sec {
+    display: flex; align-items: baseline; gap: 8px;
+    margin: 12px 2px 6px; font-size: 12px; color: var(--ink); font-weight: 600;
+  }
+  .sec:first-child { margin-top: 2px; }
+  .sec .tag { font-size: 10px; color: var(--dim); font-weight: 400; }
+  .meter { height: 5px; border-radius: 3px; background: rgba(255,255,255,.10); overflow: hidden; margin: 6px 2px 4px; }
+  .meter i { display: block; height: 100%; border-radius: 3px; background: var(--green); }
+  .meter i.amber { background: var(--amber); }
+  .meter i.blue { background: var(--blue); }
+  .meter i.violet { background: var(--violet); }
+  .kv { font-size: 10.5px; color: var(--muted); margin: 3px 2px 0; letter-spacing: 0; }
+  .kv b { color: var(--ink); font-weight: 600; }
+  .chart { margin: 6px 2px 2px; }
+  .footnote { font-size: 10px; color: var(--dim); margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { text-align: left; color: var(--dim); font-weight: 400; font-size: 10px; padding: 3px 6px 6px; border-bottom: 1px solid var(--border); }
+  th.r, td.r { text-align: right; }
+  th .sort { color: var(--accent); }
+  td { padding: 4.5px 6px; color: var(--muted); border-bottom: 1px solid rgba(255,255,255,.04); }
+  td.cmd { color: var(--ink); }
+  td .hl { color: var(--green); }
+  .kill {
+    display: inline-block; font-size: 9.5px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px;
+  }
+  .kill.force { color: var(--red); border-color: rgba(247,118,142,.4); }
+  .vol { display: flex; align-items: center; gap: 10px; margin: 7px 2px; }
+  .vol .name { font-size: 11.5px; color: var(--ink); width: 88px; flex: none; }
+  .vol .meter { flex: 1; margin: 0; }
+  .vol .sz { font-size: 10.5px; color: var(--muted); width: 92px; text-align: right; flex: none; }
+  .pill { font-size: 9.5px; color: var(--green); border: 1px solid rgba(158,206,106,.35); background: rgba(158,206,106,.08); border-radius: 8px; padding: 1.5px 8px; }
+  .caption { width: 100%; text-align: left; color: var(--dim); font-size: 11px; padding: 4px 2px; }
+</style>
+</head>
+<body>
+
+<!-- ============ PANEL: BAR (compact strip) ============ -->
+<div>
+<div class="caption">0 · Bar widget (compact)</div>
+<div id="panel-bar" style="width:400px;">
+  <div style="display:inline-flex; align-items:center; gap:12px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:7px 14px; box-shadow:0 24px 60px rgba(0,0,0,.5);">
+    <span style="font-size:12px; color:var(--ink);">M</span>
+    <span style="display:inline-block; width:5px; height:16px; border-radius:3px; background:rgba(255,255,255,.10); overflow:hidden;"><i style="display:block; width:100%; height:42%; background:var(--green);"></i></span>
+    <span style="font-size:12px; color:var(--ink);">C</span>
+    <span style="display:inline-block; width:5px; height:16px; border-radius:3px; background:rgba(255,255,255,.10); overflow:hidden;"><i style="display:block; width:100%; height:64%; background:var(--green);"></i></span>
+    <span style="font-size:12px; color:var(--ink);">N</span>
+    <span style="display:inline-block; width:5px; height:16px; border-radius:3px; background:rgba(255,255,255,.10); overflow:hidden;"><i style="display:block; width:100%; height:30%; background:var(--blue);"></i></span>
+    <span style="font-size:12px; color:var(--ink);">D</span>
+    <span style="display:inline-block; width:5px; height:16px; border-radius:3px; background:rgba(255,255,255,.10); overflow:hidden;"><i style="display:block; width:100%; height:51%; background:var(--green);"></i></span>
+  </div>
+</div>
+</div>
+
+<!-- ============ TAB 1: PERFORMANCE ============ -->
+<div>
+<div class="caption">1 · Performance</div>
+<div class="panel" id="panel-performance">
+  <div class="tabs">
+    <div class="tab active">Performance</div><div class="tab">Disks</div><div class="tab">Processes</div>
+  </div>
+  <div class="body">
+    <div class="temps"><span>CPU <b>62°</b></span><span>GPU <b>54°</b></span><span>NVMe <b>47°</b></span></div>
+
+    <div class="sec">M · Memory <span class="tag">· RAM</span></div>
+    <div class="meter"><i style="width:38%;"></i></div>
+    <svg class="chart" width="372" height="30" viewBox="0 0 372 30">
+      <polyline fill="none" stroke="#e0af68" stroke-width="1.5" opacity=".9"
+        points="0,26 20,25 40,25 60,23 80,24 100,22 120,23 140,21 160,22 180,20 200,22 220,21 240,19 260,21 280,20 300,22 320,21 340,20 360,21 372,20"/>
+    </svg>
+    <div class="kv"><b>used 11.4G</b>  buff 0.6G  cache 9.8G  swap 0.2G</div>
+
+    <div class="sec">C · CPU <span class="tag">· 24 threads</span></div>
+    <div class="meter"><i style="width:64%;"></i></div>
+    <svg class="chart" width="372" height="34" viewBox="0 0 372 34">
+      <polyline fill="none" stroke="#9ece6a" stroke-width="1.5"
+        points="0,26 20,22 40,28 60,16 80,20 100,12 120,18 140,24 160,14 180,19 200,10 220,16 240,22 260,13 280,18 300,11 320,20 340,15 360,18 372,16"/>
+      <polyline fill="none" stroke="#bb9af7" stroke-width="1.5" opacity=".95"
+        points="0,30 20,28 40,30 60,24 80,27 100,20 120,25 140,28 160,22 180,26 200,18 220,23 240,27 260,21 280,25 300,19 320,26 340,22 360,24 372,23"/>
+    </svg>
+    <div class="kv">total <b style="color:var(--green)">64%</b> · core7 <b style="color:var(--violet)">81%</b> · load 1.42 / 1.31 / 1.18</div>
+
+    <div class="sec">G · GPU <span class="tag">· amdgpu</span></div>
+    <svg class="chart" width="372" height="30" viewBox="0 0 372 30">
+      <polyline fill="none" stroke="#7aa2f7" stroke-width="1.5"
+        points="0,24 20,20 40,22 60,15 80,18 100,12 120,16 140,21 160,14 180,17 200,11 220,15 240,19 260,13 280,17 300,12 320,18 340,14 360,16 372,15"/>
+    </svg>
+    <div class="kv">power 12.8W · VRAM <b>3.1G/12.0G</b> · GTT 0.8G/8.0G</div>
+    <div style="display:flex; gap:10px; margin-top:5px;">
+      <div class="meter" style="flex:1;"><i class="blue" style="width:26%;"></i></div>
+      <div class="meter" style="flex:1;"><i class="violet" style="width:10%;"></i></div>
+    </div>
+
+    <div class="sec">N · Network <span class="tag">· auto-scaled</span></div>
+    <svg class="chart" width="372" height="30" viewBox="0 0 372 30">
+      <polyline fill="none" stroke="#7aa2f7" stroke-width="1.5"
+        points="0,28 20,26 40,20 60,24 80,14 100,22 120,10 140,18 160,24 180,12 200,20 220,26 240,15 260,21 280,11 300,19 320,25 340,14 360,20 372,17"/>
+      <polyline fill="none" stroke="#7dcfff" stroke-width="1.5" opacity=".9"
+        points="0,29 20,29 40,27 60,28 80,25 100,27 120,24 140,26 160,28 180,25 200,27 220,29 240,26 260,27 280,24 300,26 320,28 340,25 360,27 372,26"/>
+    </svg>
+    <div class="kv">wlan0 <b>↓ 2.4M ↑ 310K</b> · eth0 ↓ 96M ↑ 12M · blue ↓ / cyan ↑</div>
+  </div>
+</div>
+</div>
+
+<!-- ============ TAB 2: DISKS ============ -->
+<div>
+<div class="caption">2 · Disks</div>
+<div class="panel" id="panel-disks">
+  <div class="tabs">
+    <div class="tab">Performance</div><div class="tab active">Disks</div><div class="tab">Processes</div>
+  </div>
+  <div class="body">
+    <div class="temps"><span>CPU <b>58°</b></span><span>GPU <b>51°</b></span><span>NVMe <b>49°</b></span></div>
+
+    <div class="sec">D · Disk <span class="tag">· nvme0n1</span></div>
+    <svg width="372" height="34" viewBox="0 0 372 34" style="margin:6px 2px 2px;">
+      <polyline fill="none" stroke="#e0af68" stroke-width="1.5"
+        points="0,30 20,29 40,22 60,27 80,14 100,24 120,9 140,20 160,26 180,12 200,22 220,28 240,16 260,24 280,10 300,21 320,27 340,15 360,23 372,19"/>
+      <polyline fill="none" stroke="#f7768e" stroke-width="1.5" opacity=".85"
+        points="0,33 20,32 40,30 60,32 80,28 100,31 120,26 140,30 160,32 180,27 200,30 220,32 240,29 260,31 280,26 300,30 320,32 340,28 360,31 372,30"/>
+    </svg>
+    <div class="kv">read <b style="color:var(--amber)">214M/s</b> · write <b style="color:var(--red)">38M/s</b> · 1.2K/340 iops</div>
+
+    <div class="sec" style="margin-top:14px;">Volumes <span class="tag">· local filesystems</span></div>
+    <div class="vol">
+      <span class="name">/</span>
+      <div class="meter"><i style="width:51%;"></i></div>
+      <span class="sz">512G / 1.0T</span>
+    </div>
+    <div class="vol">
+      <span class="name">/home</span>
+      <div class="meter"><i style="width:17%;"></i></div>
+      <span class="sz">88G / 512G</span>
+    </div>
+    <div class="vol">
+      <span class="name">/boot</span>
+      <div class="meter"><i style="width:9%;"></i></div>
+      <span class="sz">742M / 8.0G</span>
+    </div>
+    <div class="kv" style="margin-top:8px;">SMART <span class="pill">OK</span> · deduped by source device · btrfs shows once</div>
+  </div>
+</div>
+</div>
+
+<!-- ============ TAB 3: PROCESSES ============ -->
+<div>
+<div class="caption">3 · Processes</div>
+<div class="panel" id="panel-processes">
+  <div class="tabs">
+    <div class="tab">Performance</div><div class="tab">Disks</div><div class="tab active">Processes</div>
+  </div>
+  <div class="body">
+    <div class="temps"><span>CPU <b>60°</b></span><span>GPU <b>52°</b></span><span>NVMe <b>46°</b></span></div>
+    <table>
+      <tr>
+        <th><span class="sort">PID ▾</span></th><th class="r">CPU</th><th class="r">MEM</th><th>USER</th><th>COMMAND</th><th></th>
+      </tr>
+      <tr><td>4102</td><td class="r hl">12.4%</td><td class="r">3.1G</td><td>sam</td><td class="cmd">firefox</td><td class="r"><span class="kill">Kill</span></td></tr>
+      <tr><td>2891</td><td class="r hl">8.2%</td><td class="r">2.4G</td><td>sam</td><td class="cmd">code</td><td class="r"><span class="kill">Kill</span></td></tr>
+      <tr><td>7741</td><td class="r hl">6.9%</td><td class="r">412M</td><td>sam</td><td class="cmd">mpv</td><td class="r"><span class="kill force">Force kill</span></td></tr>
+      <tr><td>1539</td><td class="r hl">3.1%</td><td class="r">96M</td><td>sam</td><td class="cmd">quickshell</td><td class="r"><span class="kill">Kill</span></td></tr>
+      <tr><td>1540</td><td class="r hl">2.2%</td><td class="r">88M</td><td>sam</td><td class="cmd">hyprland</td><td class="r"><span class="kill">Kill</span></td></tr>
+      <tr><td>612</td><td class="r hl">1.8%</td><td class="r">34M</td><td>sam</td><td class="cmd">pipewire</td><td class="r"><span class="kill">Kill</span></td></tr>
+      <tr><td>9204</td><td class="r hl">1.2%</td><td class="r">22M</td><td>sam</td><td class="cmd">foot</td><td class="r"><span class="kill">Kill</span></td></tr>
+      <tr><td>3310</td><td class="r hl">0.9%</td><td class="r">180M</td><td>root</td><td class="cmd" style="color:var(--muted)">dockerd</td><td class="r" style="color:var(--dim); font-size:9.5px;">owned by root</td></tr>
+    </table>
+    <div class="footnote">click header to sort by CPU or memory · TERM first, Force kill only if it survives</div>
+  </div>
+</div>
+</div>
+
+<script>
+  // Export mode: ?only=<panel-id> hides everything else for clean screenshots.
+  const params = new URLSearchParams(location.search);
+  const only = params.get('only');
+  if (only) {
+    document.body.style.padding = '0';
+    document.querySelectorAll('.caption').forEach(e => e.remove());
+    document.querySelectorAll('body > div').forEach(w => {
+      if (!w.querySelector('#' + only)) w.remove();
+    });
+    document.body.style.display = 'block';
+  }
+</script>
+</body>
+</html>
