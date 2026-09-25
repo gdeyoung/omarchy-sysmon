@@ -81,6 +81,7 @@ BarWidget {
 
   // ---- Processes (popup only) ----------------------------------------------
   property var procs: []            // [[pid,user,comm,pcpu,pmem,state],...]
+  property var hwinfo: null         // static hardware inventory (About probe)
   property string procSort: "cpu"
   property int killTarget: 0
   property bool killTermed: false   // true after a TERM was sent to killTarget
@@ -448,6 +449,23 @@ BarWidget {
       waitForEnd: true
       onStreamFinished: root.applyProcs(text)
     }
+  }
+
+  Process {
+    id: hwProbe
+    command: ["/bin/bash", Qt.resolvedUrl("sysinfo-probe.sh").toString().replace("file://", "")]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        let data
+        try { data = JSON.parse(String(text).trim()) } catch (e) { return }
+        if (data && data.identity) root.hwinfo = data
+      }
+    }
+  }
+
+  function refreshHwinfo() {
+    if (!hwProbe.running) hwProbe.running = true
   }
 
   Timer {

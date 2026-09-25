@@ -35,6 +35,16 @@ The task-manager view: top processes sorted by CPU or memory (click the header t
 
 ![Processes tab](docs/panel-processes.png)
 
+### Hardware tab
+
+Fastfetch-grade machine inventory, probed once when the popup opens — no root, no Python, no extra dependencies: vendor/product/board, BIOS version + date, CPU (model, cores/threads, max clock, L3), memory, GPU, displays + native mode, physical storage + size, network controllers with their kernel drivers, audio cards, battery model/technology/health, Bluetooth, USB/PCI device counts, OS + kernel, and uptime. Anything your hardware doesn't expose just hides.
+
+![Hardware tab](docs/panel-hardware.png)
+
+### What's new
+
+- **v0.5.0** — Hardware tab: fastfetch-grade unprivileged inventory (new `sysinfo-probe.sh`, popup widened to fit).
+
 Forked from [vm.sysmem](https://github.com/jhonoryza/omarchy-sysmem) by jhonoryza (MIT).
 
 ## Bar

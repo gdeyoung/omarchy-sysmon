@@ -20,12 +20,15 @@ PopupCard {
   // No `open:` binding on purpose: PopupCard's outside-click close assigns
   // to `open`, which would break a binding and leave the popup unable to
   // reopen. The host drives open imperatively; this syncs state back.
-  onOpenChanged: host.popupOpen = open
+  onOpenChanged: {
+    host.popupOpen = open
+    if (open && !host.hwinfo) host.refreshHwinfo()
+  }
 
   // debug: expose layout heights to IPC status (colH = active tab content)
   readonly property real scrollColH: scrollCol ? scrollCol.implicitHeight : 0
 
-  contentWidth: popup.fittedContentWidth(Style.space(560))
+  contentWidth: popup.fittedContentWidth(Style.space(680))
   // Height follows the ACTIVE tab's content (hidden sections don't reserve
   // space in ColumnLayout), bounded by available screen — no fixed cap, so
   // nothing sits below the fold. Flickable stays as overflow safety.
@@ -130,6 +133,7 @@ PopupCard {
         TabBtn { key: "perf"; label: "Performance" }
         TabBtn { key: "disk"; label: "Disks" }
         TabBtn { key: "procs"; label: "Processes" }
+        TabBtn { key: "hw"; label: "Hardware" }
       }
 
       // ---- M · Memory -----------------------------------------------------
@@ -528,6 +532,126 @@ PopupCard {
               color: cancelMouse.containsMouse ? "#2c3040" : "#232733"
               Text { anchors.centerIn: parent; text: "Cancel"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
               MouseArea { id: cancelMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { w.killTarget = 0; w.killTermed = false } }
+            }
+          }
+        }
+      }
+
+      // ---- H · Hardware -----------------------------------------------------
+      SysSection {
+        id: hwSection
+        Layout.fillWidth: true
+        visible: popup.tab === "hw"
+        title: "H · Hardware"
+        summary: w.hwinfo ? (w.hwinfo.identity.product || w.hwinfo.identity.board || "") : "probing…"
+
+        component HwRow: RowLayout {
+          id: hwRow
+          Layout.fillWidth: true
+          property string label: ""
+          property string value: ""
+          Text {
+            Layout.preferredWidth: hwSection.labelW
+            text: hwRow.label
+            color: popup.muted
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+          Text {
+            Layout.fillWidth: true
+            text: hwRow.value
+            color: popup.fg
+            elide: Text.ElideRight
+            font.family: Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+        }
+
+        readonly property var hw: w.hwinfo
+        readonly property real labelW: Style.space(76)
+
+
+        ColumnLayout {
+          id: hwCol
+          Layout.fillWidth: true
+          spacing: Style.space(2)
+          visible: hwSection.hw !== null
+
+          Text {
+            Layout.fillWidth: true
+            text: hwSection.hw && hwSection.hw.identity ? (hwSection.hw.identity.product || "") : ""
+            color: popup.fg
+            font.bold: true
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+            elide: Text.ElideRight
+          }
+
+          HwRow { label: "Board";   value: hwSection.hw && hwSection.hw.identity ? (hwSection.hw.identity.board || "—") : "—" }
+          HwRow { label: "BIOS";    value: hwSection.hw && hwSection.hw.identity ? ((hwSection.hw.identity.bios_version || "—") + "  (" + (hwSection.hw.identity.bios_date || "?") + ")") : "—" }
+          HwRow { label: "CPU";     value: hwSection.hw ? hwSection.hw.cpu.model : "" }
+          HwRow {
+            label: "Cores"
+            value: {
+              if (!hwSection.hw) return ""
+              var c = hwSection.hw.cpu
+              var s = (c.cores !== null ? c.cores + "c / " : "") + c.threads + "t"
+              if (c.max_mhz && c.max_mhz !== null) s += "  ·  " + (c.max_mhz / 1000).toFixed(1) + " GHz max"
+              if (c.l3_kb && c.l3_kb !== null) s += "  ·  L3 " + (c.l3_kb / 1024).toFixed(0) + " MiB"
+              return s
+            }
+          }
+          HwRow {
+            label: "Memory"
+            value: {
+              if (!hwSection.hw) return ""
+              var m = hwSection.hw.mem
+              var s = (m.total_mb / 1024).toFixed(0) + " GiB"
+              if (m.type) s += "  ·  " + m.type
+              if (m.speed) s += " @ " + m.speed
+              if (m.banks !== null && m.banks !== undefined) s += "  ·  " + m.banks + " bank" + (m.banks === 1 ? "" : "s")
+              return s
+            }
+          }
+          HwRow { label: "GPU";     value: hwSection.hw ? (hwSection.hw.gpu || "—") : "—" }
+          Repeater {
+            model: hwSection.hw && hwSection.hw.displays ? hwSection.hw.displays : []
+            HwRow { label: index === 0 ? "Display" : ""; value: modelData.connector + "  ·  " + modelData.mode }
+          }
+          Repeater {
+            model: hwSection.hw && hwSection.hw.disks ? hwSection.hw.disks : []
+            HwRow { label: index === 0 ? "Storage" : ""; value: modelData.name + "  ·  " + modelData.size }
+          }
+          Repeater {
+            model: hwSection.hw && hwSection.hw.net ? hwSection.hw.net : []
+            HwRow { label: index === 0 ? "Network" : ""; value: modelData.name + (modelData.driver ? "  ·  " + modelData.driver : "") }
+          }
+          Repeater {
+            model: hwSection.hw && hwSection.hw.audio ? hwSection.hw.audio : []
+            HwRow { label: index === 0 ? "Audio" : ""; value: modelData }
+          }
+          HwRow {
+            visible: hwSection.hw && hwSection.hw.battery !== null && hwSection.hw.battery !== undefined
+            label: "Battery"
+            value: {
+              if (!hwSection.hw || !hwSection.hw.battery) return ""
+              var b = hwSection.hw.battery
+              var s = (b.model || b.manufacturer || "—")
+              if (b.tech) s += "  ·  " + b.tech
+              if (b.health_pct !== null && b.health_pct !== undefined) s += "  ·  " + b.health_pct + "% health"
+              return s
+            }
+          }
+          HwRow { label: "Bluetooth"; value: hwSection.hw ? (hwSection.hw.bluetooth ? "yes" : "no") : "" }
+          HwRow { label: "Devices"; value: hwSection.hw ? (hwSection.hw.io.usb_devices + " USB  ·  " + hwSection.hw.io.pci_devices + " PCI") : "" }
+          HwRow { label: "OS";      value: hwSection.hw ? ((hwSection.hw.os.pretty || "") + "  ·  kernel " + hwSection.hw.os.kernel) : "" }
+          HwRow {
+            label: "Uptime"
+            value: {
+              if (!hwSection.hw) return ""
+              var s = hwSection.hw.os.uptime_s
+              var d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60)
+              return (d > 0 ? d + "d " : "") + h + "h " + m + "m"
             }
           }
         }
