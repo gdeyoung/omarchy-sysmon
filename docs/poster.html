@@ -52,9 +52,9 @@
     box-shadow: 0 40px 110px rgba(0,0,0,.65), 0 0 0 1px rgba(158,206,106,.32);
   }
   #p1 { width: 500px; left: 200px; top: 40px;  z-index: 3; }  /* Performance (hero) 500x636, top-right */
-  #p2 { width: 340px; left: 0px;   top: 700px; z-index: 2; }  /* Disks 340x264, only its corner tucks under hero; tabs clear at y>690 */
-  #p3 { width: 360px; left: 370px; top: 700px; z-index: 4; }  /* Processes 360x336, bottom-right */
-  #p4 { width: 290px; left: 30px;  top: 830px; z-index: 5; }  /* Bar strip 290x62, bottom-left */
+  #p2 { width: 360px; left: 0px;   top: 700px; z-index: 2; }  /* Processes 360x336, bottom-left */
+  #p3 { width: 430px; left: 330px; top: 715px; z-index: 4; }  /* Hardware 430x256, landscape, top-right sliver over p2 padding only */
+  #p4 { width: 290px; left: 390px; top: 1005px; z-index: 5; } /* Bar strip 290x62, tucked below hardware */
 </style>
 </head>
 <body>
@@ -63,22 +63,23 @@
     <h1>A task manager that lives in your Omarchy bar.</h1>
     <div class="sub">Four letters — M C N D — one 5px meter each, zero noise until you
     click. Then a tabbed popup opens with minutes of warm history already drawn:
-    performance charts, GPU power and VRAM, disk gauges, and a killable process table.</div>
+    performance charts, GPU power and VRAM, disk gauges, a killable process table,
+    and a fastfetch-grade hardware inventory.</div>
     <div class="features">
       <div>One letter + one 5px meter per stat</div>
       <div>Charts open with warm history — buffers always run</div>
       <div>GPU load, power draw, VRAM &amp; GTT meters</div>
       <div>Per-volume disk gauges, deduped by device</div>
-      <div>Two-step kill — TERM, then Force kill</div>
+      <div>Hardware tab — board, BIOS, CPU, battery health</div>
       <div>CPU / GPU / NVMe temps, threshold-colored</div>
+      <div>Two-step kill — TERM, then Force kill</div>
       <div>Sort by CPU or memory with one click</div>
-      <div>barMode: values restores full bar readouts</div>
     </div>
   </div>
   <div class="right">
     <img class="panelshot" id="p1" src="/tmp/sysmon_shots/panel-performance.png">
-    <img class="panelshot" id="p2" src="/tmp/sysmon_shots/panel-disks.png">
-    <img class="panelshot" id="p3" src="/tmp/sysmon_shots/panel-processes.png">
+    <img class="panelshot" id="p2" src="/tmp/sysmon_shots/panel-processes.png">
+    <img class="panelshot" id="p3" src="/tmp/sysmon_shots/panel-hardware.png">
     <img class="panelshot" id="p4" src="/tmp/sysmon_shots/panel-bar.png">
   </div>
   <div class="foot">
