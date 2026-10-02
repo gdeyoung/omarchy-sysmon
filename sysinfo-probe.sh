@@ -28,9 +28,13 @@ l3_kb=$(lscpu 2>/dev/null | awk -F: '/^L3 cache:/ {
 l3_kb=${l3_kb:-null}
 
 # --- GPU --------------------------------------------------------------------
-# lspci prefixes the vendor ("Advanced Micro Devices, Inc. [AMD/ATI] ") — keep
-# the concise marketing name after the last "] " when present.
-gpu=$(lspci 2>/dev/null | grep -iE "vga|3d controller|display controller" | head -1 | cut -d: -f3- | sed 's/^ *//; s/^[^]]*\] //; s/ (rev [0-9a-f]*)$//')
+# lspci prefixes the vendor ("Advanced Micro Devices, Inc. [AMD/ATI] " etc.) —
+# keep the concise marketing name: drop bracketed vendor forms, then the
+# common bracketless vendor prefixes, then the "(rev xx)" suffix.
+gpu=$(lspci 2>/dev/null | grep -iE "vga|3d controller|display controller" | head -1 | cut -d: -f3- \
+  | sed -e 's/^ *//' -e 's/^[^]]*\] //' \
+        -e 's/^\(Intel Corporation\|NVIDIA Corporation\|Advanced Micro Devices, Inc\.\|ATI Technologies Inc\.\|Matrox Electronics Systems Ltd\.\|ASPEED Technology, Inc\.\|S3 Graphics Co\., Ltd\.\|Silicon Integrated Systems \[SiS\]\|Loongson Technology Co\., Ltd\.\|VMware SVGA II Adapter\|Red Hat, Inc\.\|Cirrus Logic\| Trident Microsystems\) //' \
+        -e 's/ (rev [0-9a-f]*)$//')
 
 # --- Memory -----------------------------------------------------------------
 mem_total_kb=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
