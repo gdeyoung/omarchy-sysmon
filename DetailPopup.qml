@@ -550,9 +550,13 @@ PopupCard {
           Layout.fillWidth: true
           property string label: ""
           property string value: ""
+          // textFormat PlainText on both fields: values come from DMI /
+          // device descriptors; Qt rich-text auto-detection must never
+          // interpret a markup-shaped device string (marketplace #8246).
           Text {
             Layout.preferredWidth: hwSection.labelW
             text: hwRow.label
+            textFormat: Text.PlainText
             color: popup.muted
             font.family: Style.font.family
             font.pixelSize: Style.font.caption
@@ -560,6 +564,7 @@ PopupCard {
           Text {
             Layout.fillWidth: true
             text: hwRow.value
+            textFormat: Text.PlainText
             color: popup.fg
             elide: Text.ElideRight
             font.family: Style.font.family
@@ -580,6 +585,7 @@ PopupCard {
           Text {
             Layout.fillWidth: true
             text: hwSection.hw && hwSection.hw.identity ? (hwSection.hw.identity.product || "") : ""
+            textFormat: Text.PlainText
             color: popup.fg
             font.bold: true
             font.family: Style.font.family

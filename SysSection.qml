@@ -46,7 +46,10 @@ ColumnLayout {
       }
       Item { Layout.fillWidth: true }
       Text {
+        // Summary can carry DMI-derived strings (e.g. the Hardware tab's
+        // product name) — force plain text (marketplace #8246).
         text: sec.summary
+        textFormat: Text.PlainText
         color: "#9aa5ce"
         font.family: Style.font.family
         font.pixelSize: Style.font.caption

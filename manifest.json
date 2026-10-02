@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "gdeyoung.sysmon",
   "name": "SysMon",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "author": "gdeyoung",
   "license": "MIT",
   "description": "Compact RAM/CPU/net/disk meters that expand into a full system popup: performance charts, disk I/O, processes, and a fastfetch-grade Hardware tab (BIOS, board, CPU, memory, GPU, storage, network, battery)",

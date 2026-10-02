@@ -43,6 +43,7 @@ Fastfetch-grade machine inventory, probed once when the popup opens — no root,
 
 ### What's new
 
+- **v0.5.1** — Security: hardware-derived strings (DMI product/board, device names) rendered with `textFormat: Text.PlainText` so markup-shaped device strings can never trigger rich-text loading. Probe: concise GPU name on bracketless-vendor devices (Intel). Tests green.
 - **v0.5.0** — Hardware tab: fastfetch-grade unprivileged inventory (new `sysinfo-probe.sh`, popup widened to fit).
 
 Forked from [vm.sysmem](https://github.com/jhonoryza/omarchy-sysmem) by jhonoryza (MIT).
