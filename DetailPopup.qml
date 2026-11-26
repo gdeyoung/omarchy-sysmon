@@ -6,11 +6,13 @@ import qs.Ui
 // DetailPopup — the SysMon v0.6 shell, ported from the KDE plasmoid's Details.qml.
 // FIXED frame for ALL four tabs (v0.5.1 self-sized its height per tab, so the
 // popup jumped on every tab switch). Sizing lives HERE and ONLY here: the
-// content area is 928x616 logical; the card adds its own padding and border.
+// content area is 928x608 logical; the card adds its own padding and border
+// (14*2 + 2*2 = 32 per axis), which makes the VISIBLE CARD exactly 960x640 —
+// the fixed frame from the v0.6 spec. Check with `status`: popupW x popupH.
 //
 //   header 32   "SysMon" ... [CPU 79°][GPU 41°][NVMe 48°]  ● as of 15:22:41
 //   tabbar 36   Performance · Disks · Processes · Hardware
-//   pages  532  one frame for every tab
+//   pages  524  one frame for every tab (608 - 32 header - 36 tabs - 12 gap)
 //
 // Header: title + temp pills (the only temps in the popup) + provenance stamp.
 PopupCard {
@@ -31,7 +33,7 @@ PopupCard {
   }
 
   readonly property int frameW: 928
-  readonly property int frameH: 616
+  readonly property int frameH: 608
   // contentWidth/Height are the CARD's size; the content holder is inset by
   // padding + border. fittedContentHeight already adds the vertical inset;
   // width needs it added explicitly or the page renders that much too narrow.
