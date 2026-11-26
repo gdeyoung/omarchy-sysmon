@@ -492,6 +492,14 @@ BarWidget {
     function toggle(): void { detailPopup.open ? detailPopup.close() : detailPopup.open = true }
     function tab(name: string): void { detailPopup.tab = name }
 
+    // Test / harness verbs (additive; see README "IPC"). The UI mirrors this
+    // state, so a script can drive filter/sort/selection and read the result
+    // back from status(). Deliberately NO kill verb: ending a process is a
+    // click on the confirm strip, not a command.
+    function filter(text: string): void { root.procFilter = text }
+    function sort(col: string): void { root.procSort = col }
+    function select(pid: int): void { root.procSelectedPid = pid }
+
     function status(): string {
       return JSON.stringify({
         opened: root.popupOpen,
@@ -601,14 +609,6 @@ BarWidget {
   function refreshHwinfo() {
     if (!hwProbe.running) hwProbe.running = true
   }
-
-  // ---- test / harness verbs (additive; README "IPC") -----------------------
-  // The UI state mirrors these, so a script can drive filter/sort/selection
-  // and read the result back from status(). Deliberately NO kill verb: ending
-  // a process is a click on the confirm strip, not a command.
-  function filter(text: string): void { root.procFilter = text }
-  function sort(col: string): void { root.procSort = col }
-  function select(pid: int): void { root.procSelectedPid = pid }
 
   Timer {
     // Process table refresh: only while the popup is open.
