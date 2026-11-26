@@ -8,20 +8,28 @@ esc() { printf '%s' "$1" | tr '\t\r\n' ' ' | sed 's/\\/\\\\/g; s/"/\\"/g'; }  # 
 qs() { printf '"%s"' "$(esc "$1")"; }
 dmi() { qs "$(cat "/sys/class/dmi/id/$1" 2>/dev/null)"; }
 
+# Every external command that talks to another process or a device is bounded:
+# timeout(1) TERM's it after CMD_TIMEOUT_S and KILL's a second later, so one
+# hung helper (a compositor socket that never answers, a flaky USB device)
+# costs its own field, never the inventory. The widget wraps the whole probe
+# in a second, outer deadline (Probe.js).
+CMD_TIMEOUT_S=1
+t() { /usr/bin/timeout -k 1 "$CMD_TIMEOUT_S" "$@"; }
+
 # --- CPU --------------------------------------------------------------------
 cpu_model=$(grep -m1 "^model name" /proc/cpuinfo | cut -f2- -d: | sed 's/^ //')
 cpu_arch=$(uname -m)
 cpu_threads=$(nproc)
-sockets=$(lscpu 2>/dev/null | awk -F: '/^Socket\(s\)/ { gsub(/ /,"",$2); print $2 }' | head -1)
-cps=$(lscpu 2>/dev/null | awk -F: '/^Core\(s\) per socket/ { gsub(/ /,"",$2); print $2 }')
+sockets=$(t lscpu 2>/dev/null | awk -F: '/^Socket\(s\)/ { gsub(/ /,"",$2); print $2 }' | head -1)
+cps=$(t lscpu 2>/dev/null | awk -F: '/^Core\(s\) per socket/ { gsub(/ /,"",$2); print $2 }')
 if [ -n "$sockets" ] && [ -n "$cps" ] && [ "$sockets" -gt 0 ] 2>/dev/null; then
   cpu_cores=$((cps * sockets))
 else
   cpu_cores=null
 fi
-cpu_mhz=$(lscpu 2>/dev/null | awk -F: '/^CPU max MHz/ { print int($2) }')
+cpu_mhz=$(t lscpu 2>/dev/null | awk -F: '/^CPU max MHz/ { print int($2) }')
 cpu_mhz=${cpu_mhz:-null}
-l3_kb=$(lscpu 2>/dev/null | awk -F: '/^L3 cache:/ {
+l3_kb=$(t lscpu 2>/dev/null | awk -F: '/^L3 cache:/ {
   v=$2 + 0; u=$2; sub(/^ +[0-9.]+ +/,"",u)
   if (u ~ /MiB/) print int(v * 1024); else if (u ~ /KiB/) print int(v); else if (u ~ /GiB/) print int(v * 1048576); else print int(v)
 }')
@@ -37,7 +45,7 @@ l3_kb=${l3_kb:-null}
 #      Corporation/...); a blind '^[^]]*] //' would eat NVIDIA marketing names
 #      like "GB203 [GeForce RTX 5080]" down to "(rev a1)".
 #   4. bracketless vendor prefixes (NVIDIA Corporation, ASPEED Technology, ...)
-gpu=$(lspci 2>/dev/null | grep -iE "vga|3d controller|display controller" | head -1 | cut -d: -f3- \
+gpu=$(t lspci 2>/dev/null | grep -iE "vga|3d controller|display controller" | head -1 | cut -d: -f3- \
   | sed -e 's/^ *//' -e 's/^[^:]*: //' -e 's/ (rev [0-9a-f]*)$//')
 if printf '%s' "$gpu" | grep -qE '(Inc\.|Ltd\.|Corporation|Systems|Technology) \['; then
   gpu=$(printf '%s' "$gpu" | sed -e 's/^[^]]*\] //')
@@ -45,13 +53,13 @@ fi
 gpu=$(printf '%s' "$gpu" | sed -e 's/^\(Intel Corporation\|NVIDIA Corporation\|Advanced Micro Devices, Inc\.\|ATI Technologies Inc\.\|Matrox Electronics Systems Ltd\.\|ASPEED Technology, Inc\.\|S3 Graphics Co\., Ltd\.\|Silicon Integrated Systems \[SiS\]\|Loongson Technology Co\., Ltd\.\|VMware SVGA II Adapter\|Red Hat, Inc\.\|Cirrus Logic\|Trident Microsystems\) //')
 
 # --- GPU driver/module/vBIOS (nvidia procfs when present) --------------------
-gpu_slot=$(lspci 2>/dev/null | grep -iE "vga|3d controller|display controller" | head -1 | awk '{print $1}')
-gpu_driver=$(lspci -k -s "$gpu_slot" 2>/dev/null | sed -n 's/.*Kernel driver in use: //p')
+gpu_slot=$(t lspci 2>/dev/null | grep -iE "vga|3d controller|display controller" | head -1 | awk '{print $1}')
+gpu_driver=$(t lspci -k -s "$gpu_slot" 2>/dev/null | sed -n 's/.*Kernel driver in use: //p')
 gpu_module=""
 case "$gpu_driver" in
-  nvidia|nvidia_drm) gpu_module=$(modinfo -F version nvidia 2>/dev/null) ;;
+  nvidia|nvidia_drm) gpu_module=$(t modinfo -F version nvidia 2>/dev/null) ;;
   # In-tree amdgpu carries no modinfo version; its version IS the kernel's.
-  amdgpu) gpu_module=$(modinfo -F version amdgpu 2>/dev/null); [ -n "$gpu_module" ] || gpu_module="in-tree $(uname -r)" ;;
+  amdgpu) gpu_module=$(t modinfo -F version amdgpu 2>/dev/null); [ -n "$gpu_module" ] || gpu_module="in-tree $(uname -r)" ;;
 esac
 gpu_vbios=$(sed -n 's/^Video BIOS:[[:space:]]*//p' /proc/driver/nvidia/gpus/*/information 2>/dev/null | head -1)
 gpu_name_proc=$(sed -n 's/^Model:[[:space:]]*//p' /proc/driver/nvidia/gpus/*/information 2>/dev/null | head -1)
@@ -60,7 +68,7 @@ gpu_name_proc=$(sed -n 's/^Model:[[:space:]]*//p' /proc/driver/nvidia/gpus/*/inf
 
 # --- Memory -----------------------------------------------------------------
 mem_total_kb=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
-dmi_mem=$(dmidecode -t memory 2>/dev/null)
+dmi_mem=$(t dmidecode -t memory 2>/dev/null)
 # non-root dmidecode still prints a 2-line preamble before failing — only
 # trust it if actual Size records came back
 printf '%s' "$dmi_mem" | grep -q "^\\s*Size:" || dmi_mem=""
@@ -100,12 +108,12 @@ while read -r name bytes _type rest; do
   label="${model:-/dev/$name}"
   [ -n "$disks" ] && disks="$disks,"
   disks="$disks{\"name\":\"$(esc "$label")\",\"size\":\"$(esc "$size")\",\"serial\":\"$(esc "$serial")\",\"transport\":\"$(esc "$tran")\",\"dev\":\"$(esc "$name")\"}"
-done < <(lsblk -dnb -o NAME,SIZE,TYPE,MODEL,SERIAL,TRAN 2>/dev/null)
+done < <(t lsblk -dnb -o NAME,SIZE,TYPE,MODEL,SERIAL,TRAN 2>/dev/null)
 [ -n "$disks" ] || disks=''
 
 # --- Network controllers (+ kernel driver), line-based parse -----------------
 nets=""
-pcilspci=$(lspci -k 2>/dev/null)
+pcilspci=$(t lspci -k 2>/dev/null)
 while IFS=$'\t' read -r name drv; do
   [ -n "$name" ] || continue
   [ -n "$nets" ] && nets="$nets,"
@@ -147,8 +155,8 @@ fi
 
 # --- Bluetooth / I/O counts ---------------------------------------------------
 has_bt=false; [ -d /sys/class/bluetooth ] && has_bt=true
-usb_count=$(lsusb 2>/dev/null | wc -l)
-pci_count=$(lspci 2>/dev/null | wc -l)
+usb_count=$(t lsusb 2>/dev/null | wc -l)
+pci_count=$(t lspci 2>/dev/null | wc -l)
 
 # --- OS / platform ------------------------------------------------------------
 kernel=$(uname -r)
@@ -163,14 +171,14 @@ virt=$(systemd-detect-virt 2>/dev/null); [ -n "$virt" ] || virt="none"
 # the one-JSON-line contract.
 ver1() { grep -m1 -oE '[0-9]+(\.[0-9]+)+'; }   # stdin -> first dotted version
 plasma_ver=$(timeout 3 plasmashell --version 2>/dev/null | awk '{print $2}')
-hypr_ver=$(hyprctl version 2>/dev/null | awk '/^Tag:/ { gsub(/[^0-9.]/, "", $2); print $2; exit }')
-[ -n "$hypr_ver" ] || hypr_ver=$(pacman -Q hyprland 2>/dev/null | awk '{print $2}' | ver1)
+hypr_ver=$(t hyprctl version 2>/dev/null | awk '/^Tag:/ { gsub(/[^0-9.]/, "", $2); print $2; exit }')
+[ -n "$hypr_ver" ] || hypr_ver=$(t pacman -Q hyprland 2>/dev/null | awk '{print $2}' | ver1)
 qs_ver=$(qs --version 2>/dev/null | awk '{print $2}')
-[ -n "$qs_ver" ] || qs_ver=$(pacman -Q quickshell 2>/dev/null | awk '{print $2}' | ver1)
+[ -n "$qs_ver" ] || qs_ver=$(t pacman -Q quickshell 2>/dev/null | awk '{print $2}' | ver1)
 qt_ver=$(/usr/lib/qt6/bin/qtpaths --qt-version 2>/dev/null || /usr/lib64/qt6/bin/qtpaths6 --qt-version 2>/dev/null || qmake6 -query QT_VERSION 2>/dev/null)
 qt_ver=$(printf '%s' "$qt_ver" | ver1)
 kf6_ver=$(rpm -q --qf '%{version}\n' kf6-kcoreaddons 2>/dev/null | head -1)
-[ -n "$kf6_ver" ] || kf6_ver=$(pacman -Q kf6-kcoreaddons 2>/dev/null | awk '{print $2}')
+[ -n "$kf6_ver" ] || kf6_ver=$(t pacman -Q kf6-kcoreaddons 2>/dev/null | awk '{print $2}')
 cpu_vendor=$(grep -m1 "^vendor_id" /proc/cpuinfo | awk '{print $3}')
 serial_readable() {  # DMI serials are often 0400 root-only
   local v; v=$(cat "/sys/class/dmi/id/$1" 2>/dev/null)

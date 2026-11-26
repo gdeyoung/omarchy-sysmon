@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
+import "Probe.js" as Probe
 
 // SysMon bar widget (gdeyoung.sysmon) — forked from vm.sysmem by jhonoryza (MIT).
 //
@@ -133,7 +134,7 @@ BarWidget {
     // kill did nothing ("no permission" on EPERM) instead of failing silently.
     killExit = 0
     killTermed = (sig === 15)   // keep target; escalates to Force kill (9) if it survives
-    killProc.command = ["/usr/bin/kill", "-" + sig, String(pid)]
+    killProc.command = Probe.wrap(Probe.DEADLINE_MS.kill, ["/usr/bin/kill", "-" + sig, String(pid)])
     killProc.running = true
   }
 
@@ -150,6 +151,7 @@ BarWidget {
     }
     if (!data || !data.procs) return
     procs = data.procs
+    procsTruncated = data.truncated === true
     // per-pid CPU% history for the row sparks: 30 samples @2s = 1m
     const nh = {}
     for (let i = 0; i < procs.length; i++) {
@@ -480,6 +482,27 @@ BarWidget {
   // ---- Detail popup state --------------------------------------------------
   property bool popupOpen: false
 
+  // ---- Probe lifecycle (v0.6.1) ------------------------------------------------
+  // Every probe runs under a hard deadline (Probe.js). Last exit code per
+  // probe: 0 = clean, 124/137 = the run hit its deadline. A run that did not
+  // exit cleanly keeps the previous sample (its JSON is incomplete and was
+  // rejected by apply/applyProcs); the next tick simply starts again.
+  property int sysProbeExit: -1
+  property int procsProbeExit: -1
+  property int hwProbeExit: -1
+  property int probeFailures: 0      // non-zero exits since load
+  property int probeDeadlines: 0     // of those, runs killed at their deadline
+  // The process probe capped its list (rows or bytes); the footer says so.
+  property bool procsTruncated: false
+
+  function noteProbeExit(which: string, code: int) {
+    if (which === "sys") root.sysProbeExit = code
+    else if (which === "procs") root.procsProbeExit = code
+    else root.hwProbeExit = code
+    if (code !== 0) root.probeFailures++
+    if (code === 124 || code === 137) root.probeDeadlines++
+  }
+
   IpcHandler {
     target: "gdeyoung.sysmon"
 
@@ -563,34 +586,48 @@ BarWidget {
           loaded: root.hwinfo !== null,
           hostname: root.hwinfo ? root.hwinfo.os.hostname : ""
         },
-        staleMs: root.probeStampMs > 0 ? Math.max(0, Math.round(root.clockNow - root.probeStampMs)) : -1
+        staleMs: root.probeStampMs > 0 ? Math.max(0, Math.round(root.clockNow - root.probeStampMs)) : -1,
+        probe: {
+          sysExit: root.sysProbeExit,
+          procsExit: root.procsProbeExit,
+          hwExit: root.hwProbeExit,
+          failures: root.probeFailures,
+          deadlines: root.probeDeadlines,
+          procsTruncated: root.procsTruncated,
+          deadlineMs: Probe.DEADLINE_MS
+        }
       })
     }
   }
 
+  // Every probe starts under Probe.js's deadline: a stalled helper is
+  // terminated — with all of its descendants — and the next tick retries.
   Process {
     id: probe
-    command: ["/bin/bash", Qt.resolvedUrl("sysmon.sh").toString().replace("file://", "")]
+    command: Probe.script(Probe.DEADLINE_MS.sys, Qt.resolvedUrl("sysmon.sh").toString().replace("file://", ""))
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.apply(text)
     }
+    onExited: function (code) { root.noteProbeExit("sys", code) }
   }
 
   Process {
     id: procProbe
-    // arg 1 = live filter: the probe keeps top-1500-by-CPU UNION filter matches,
-    // so a 0%-CPU target is never dropped on a busy host.
-    command: ["/bin/bash", Qt.resolvedUrl("procprobe.sh").toString().replace("file://", ""), root.procFilter]
+    // arg 1 = live filter: the probe keeps the top rows by CPU UNION filter
+    // matches, under a hard row/byte cap (v0.6.1), so a 0%-CPU target is
+    // never dropped on a busy host.
+    command: Probe.script(Probe.DEADLINE_MS.procs, Qt.resolvedUrl("procprobe.sh").toString().replace("file://", ""), [root.procFilter])
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.applyProcs(text)
     }
+    onExited: function (code) { root.noteProbeExit("procs", code) }
   }
 
   Process {
     id: hwProbe
-    command: ["/bin/bash", Qt.resolvedUrl("sysinfo-probe.sh").toString().replace("file://", "")]
+    command: Probe.script(Probe.DEADLINE_MS.hw, Qt.resolvedUrl("sysinfo-probe.sh").toString().replace("file://", ""))
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -599,14 +636,15 @@ BarWidget {
         if (data && data.identity) root.hwinfo = data
       }
     }
+    onExited: function (code) { root.noteProbeExit("hw", code) }
   }
 
   Process {
     // kill(1) as a real process so its exit code reaches the confirm strip.
     id: killProc
     stdout: StdioCollector { waitForEnd: true }
-    onExited: {
-      root.killExit = exitCode
+    onExited: function (code) {
+      root.killExit = code
       Qt.callLater(root.refreshProcs)
     }
   }
