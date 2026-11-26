@@ -87,10 +87,12 @@ test("procprobe.sh: a kernel thread keeps its full name (migration/0 is not \"0\
   // The basename rule is for absolute paths (/usr/bin/sleep -> sleep). Kernel
   // threads arrive as "[migration/0]"; taking the text after the last slash
   // produced rows named "0", "1", "2"… at the top of an a–z list.
+  // The name is the FIRST token (some thread names carry a space, e.g.
+  // "[mt76-tx phy0]"); the full text lives in the args column.
   const d = oneJson("procprobe.sh");
   const threads = d.procs.filter((r) => /^\[.*\]$/.test(r[7]));
   assert.ok(threads.length > 10, `expected kernel threads on this host, saw ${threads.length}`);
-  const broken = threads.filter((r) => r[2] !== r[7].slice(1, -1));
+  const broken = threads.filter((r) => r[2] !== r[7].slice(1, -1).split(/\s/)[0]);
   assert.deepEqual(broken.map((r) => `${r[2]} <- ${r[7]}`).slice(0, 5), []);
 });
 
