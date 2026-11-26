@@ -1,13 +1,20 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
-import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
-// DetailPopup — the sysmon panel. PopupCard anchored under the bar widget,
-// opened by left-click on the bar or via IPC open/toggle. Sections are added
-// incrementally below the header as they verify.
+// DetailPopup — the SysMon v0.6 shell, ported from the KDE plasmoid's Details.qml.
+// FIXED frame for ALL four tabs (v0.5.1 self-sized its height per tab, so the
+// popup jumped on every tab switch). Sizing lives HERE and ONLY here: the
+// content area is 928x608 logical; the card adds its own padding and border
+// (14*2 + 2*2 = 32 per axis), which makes the VISIBLE CARD exactly 960x640 —
+// the fixed frame from the v0.6 spec. Check with `status`: popupW x popupH.
+//
+//   header 32   "SysMon" ... [CPU 79°][GPU 41°][NVMe 48°]  ● as of 15:22:41
+//   tabbar 36   Performance · Disks · Processes · Hardware
+//   pages  524  one frame for every tab (608 - 32 header - 36 tabs - 12 gap)
+//
+// Header: title + temp pills (the only temps in the popup) + provenance stamp.
 PopupCard {
   id: popup
 
@@ -25,651 +32,166 @@ PopupCard {
     if (open && !host.hwinfo) host.refreshHwinfo()
   }
 
-  // debug: expose layout heights to IPC status (colH = active tab content)
-  readonly property real scrollColH: scrollCol ? scrollCol.implicitHeight : 0
+  readonly property int frameW: 928
+  readonly property int frameH: 608
+  // contentWidth/Height are the CARD's size; the content holder is inset by
+  // padding + border. fittedContentHeight already adds the vertical inset;
+  // width needs it added explicitly or the page renders that much too narrow.
+  readonly property real hInset: popup.padding * 2
+      + Border.left(popup.borderSpec) + Border.right(popup.borderSpec)
+  contentWidth: popup.fittedContentWidth(popup.frameW + popup.hInset)
+  contentHeight: popup.fittedContentHeight(popup.frameH)
 
-  contentWidth: popup.fittedContentWidth(Style.space(680))
-  // Height follows the ACTIVE tab's content (hidden sections don't reserve
-  // space in ColumnLayout), bounded by available screen — no fixed cap, so
-  // nothing sits below the fold. Flickable stays as overflow safety.
-  contentHeight: popup.fittedContentHeight(scrollCol.implicitHeight)
-
-  readonly property color fg: host && host.bar ? host.bar.foreground : Color.foreground
+  readonly property color fg: Color.popups.text
   readonly property color muted: Qt.darker(popup.fg, 1.5)
+  readonly property color cAmber: "#e5c07b"
 
-  // Tabs: perf (M C G N) · disk (D + volumes) · procs (table). Each tab's
-  // content fits the popup height cap — nothing lives below the fold.
+  // Tabs in bar order; keys keep the v0.5.1 IPC contract (perf | disk | procs | hw).
+  readonly property var tabKeys: ["perf", "disk", "procs", "hw"]
+  readonly property var tabLabels: ["Performance", "Disks", "Processes", "Hardware"]
   property string tab: "perf"
+  readonly property int tabIndex: Math.max(0, popup.tabKeys.indexOf(popup.tab))
+  // The process probe ticks only while its tab is on screen.
+  onTabIndexChanged: host.procTabActive = popup.tabIndex === 2
 
-  function tempColor(c) {
-    if (c >= 85) return "#f7768e"
-    if (c >= 70) return "#e5c07b"
-    return "#3fb950"
+  // Provenance stamp: green dot while live, amber half-disc once the probe has
+  // missed more than three ticks (last values stay on screen).
+  readonly property bool probeStale: w.probeStampMs <= 0 ? false
+      : w.clockNow - w.probeStampMs > w.refreshSeconds * 3000
+  readonly property string stampText: {
+    const d = new Date(w.probeStampMs)
+    const p = n => String(n).padStart(2, "0")
+    const s = w.probeStampMs <= 0 ? "\u2014"
+        : p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds())
+    return probeStale ? "\u25D0 stale \u00B7 " + s : "\u25CF as of " + s
   }
 
-  function levelColor(pct) {
-    if (pct >= 90) return "#f7768e"
-    if (pct >= 70) return "#e5c07b"
-    return "#3fb950"
-  }
-
-  Flickable {
-    id: flick
+  ColumnLayout {
     anchors.fill: parent
-    contentHeight: scrollCol.implicitHeight
-    boundsBehavior: Flickable.StopAtBounds
-    clip: true
+    spacing: 8
 
-    ColumnLayout {
-      id: scrollCol
-      width: flick.width
-      spacing: Style.space(10)
+    // ---- header 32 ------------------------------------------------------
+    RowLayout {
+      Layout.fillWidth: true
+      Layout.preferredHeight: 32
+      spacing: 8
 
-      // ---- Header: title + temps ----------------------------------------
-      RowLayout {
-        Layout.fillWidth: true
-        spacing: Style.space(8)
-
-        Text {
-          text: "SysMon"
-          color: popup.fg
-          font.family: Style.font.family
-          font.pixelSize: Style.font.subtitle
-          font.bold: true
-        }
-        Item { Layout.fillWidth: true }
-        Text {
-          visible: w.cpuTempC >= 0
-          text: "CPU " + Math.round(w.cpuTempC) + "°"
-          color: popup.tempColor(w.cpuTempC)
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-        }
-        Text {
-          visible: w.gpuTempC >= 0
-          text: "GPU " + Math.round(w.gpuTempC) + "°"
-          color: popup.tempColor(w.gpuTempC)
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-        }
-        Text {
-          visible: w.nvmeTempC >= 0
-          text: "NVMe " + Math.round(w.nvmeTempC) + "°"
-          color: popup.tempColor(w.nvmeTempC)
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-        }
+      Text {
+        text: "SysMon"
+        color: popup.fg
+        font.family: Style.font.family
+        font.pixelSize: 13
+        font.weight: Font.DemiBold
       }
+      Item { Layout.fillWidth: true }
 
-      // ---- Tab bar ----------------------------------------------------------
-      Row {
-        Layout.fillWidth: true
-        spacing: 6
-
-        component TabBtn: Rectangle {
-          id: tb
-          required property string key
-          required property string label
-          readonly property bool active: popup.tab === tb.key
-          width: tabText.implicitWidth + 20
-          height: 24
-          radius: 5
-          color: active ? "#31353f" : "transparent"
-          border.width: active ? 1 : 0
-          border.color: "#414860"
-
-          Text {
-            id: tabText
-            anchors.centerIn: parent
-            text: tb.label
-            color: tb.active ? popup.fg : popup.muted
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            font.bold: tb.active
-          }
-          MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: popup.tab = tb.key }
-        }
-
-        TabBtn { key: "perf"; label: "Performance" }
-        TabBtn { key: "disk"; label: "Disks" }
-        TabBtn { key: "procs"; label: "Processes" }
-        TabBtn { key: "hw"; label: "Hardware" }
-      }
-
-      // ---- M · Memory -----------------------------------------------------
-      SysSection {
-        Layout.fillWidth: true
-        visible: popup.tab === "perf"
-        title: "M · Memory"
-        summary: w.fmtGb(w.ramUsedMb) + " / " + w.fmtGb(w.ramTotalMb)
-
-        // Master gauge: used % as a rounded bar with pct text.
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(8)
-          Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 10
-            radius: 5
-            color: "#232733"
-            Rectangle {
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-              width: parent.width * Math.min(1, w.ramPct / 100)
-              height: parent.height
-              radius: 5
-              color: popup.levelColor(w.ramPct)
-            }
-          }
-          Text { text: Math.round(w.ramPct) + "%"; color: popup.fg; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true }
-        }
-        Sparkline {
-          Layout.fillWidth: true
-          Layout.preferredHeight: 46
-          series: w.histRam
-          stroke: "#e0af68"          // amber — memory's color
-          fill: "#e0af68"
-        }
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(12)
-          Text { text: "used " + w.fmtGb(w.ramUsedMb); color: popup.fg; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Text { text: "buff " + w.fmtGbB(w.buffersKb); color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Text { text: "cache " + w.fmtGbB(w.cachedKb); color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Text { visible: w.swapUsedKb > 1024; text: "swap " + w.fmtGbB(w.swapUsedKb); color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-        }
-      }
-
-      // ---- C · CPU ---------------------------------------------------------
-      SysSection {
-        Layout.fillWidth: true
-        visible: popup.tab === "perf"
-        title: "C · CPU"
-        summary: w.cpuPct < 0 ? "--%" : Math.round(w.cpuPct) + "%"
-
-        // Master gauge.
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(8)
-          Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 10
-            radius: 5
-            color: "#232733"
-            Rectangle {
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-              width: parent.width * Math.min(1, Math.max(0, w.cpuPct) / 100)
-              height: parent.height
-              radius: 5
-              color: popup.levelColor(w.cpuPct)
-            }
-          }
-          Text { text: w.cpuPct < 0 ? "--%" : Math.round(w.cpuPct) + "%"; color: popup.fg; font.family: Style.font.family; font.pixelSize: Style.font.caption; font.bold: true }
-        }
-        // Total % (green) + busiest core % (violet) overlaid.
-        Sparkline {
-          Layout.fillWidth: true
-          Layout.preferredHeight: 46
-          series: w.histCpu
-          seriesB: w.histCoreMax
-          stroke: "#9ece6a"
-          strokeB: "#bb9af7"
-          fill: "#9ece6a"
-        }
-        Text {
-          text: "load " + w.load1.toFixed(2) + " / " + w.load5.toFixed(2) + " / " + w.load15.toFixed(2)
-            + "   ·   " + w.corePcts.length + " threads"
-          color: popup.muted
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-        }
-      }
-
-      // ---- G · GPU ---------------------------------------------------------
-      SysSection {
-        Layout.fillWidth: true
-        visible: w.gpuBusyPct >= 0 && popup.tab === "perf"
-        title: "G · GPU"
-        summary: w.gpuBusyPct < 0 ? "--" : Math.round(w.gpuBusyPct) + "%"
-
-        Sparkline {
-          Layout.fillWidth: true
-          Layout.preferredHeight: 46
-          series: w.histGpuBusy
-          stroke: "#7aa2f7"
-          fill: "#7aa2f7"
-        }
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(12)
-          Text { text: "power " + (w.gpuPowerMw >= 0 ? (w.gpuPowerMw / 1000).toFixed(1) + "W" : "--"); color: popup.fg; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Text { text: "VRAM " + (w.vramUsedB >= 0 ? w.fmtRate(w.vramUsedB).replace("0K", "0") + " / " + w.fmtRate(w.vramTotalB) : "--"); color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Text { text: "GTT " + (w.gttUsedB >= 0 ? w.fmtRate(w.gttUsedB) + " / " + w.fmtRate(w.gttTotalB) : "--"); color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Item { Layout.fillWidth: true }
-        }
-        // VRAM + GTT percent bars
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(6)
-          Text { text: "VRAM"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Rectangle {
-            Layout.preferredWidth: 140
-            Layout.preferredHeight: 6
-            radius: 3
-            color: "#2c313a"
-            Rectangle {
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-              width: parent.width * Math.min(1, (w.vramUsedB > 0 && w.vramTotalB > 0 ? w.vramUsedB / w.vramTotalB : 0))
-              height: parent.height
-              radius: 3
-              color: "#7aa2f7"
-            }
-          }
-          Text { text: w.vramTotalB > 0 ? Math.round(100 * w.vramUsedB / w.vramTotalB) + "%" : "--"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Item { Layout.fillWidth: true }
-          Text { text: "GTT"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Rectangle {
-            Layout.preferredWidth: 140
-            Layout.preferredHeight: 6
-            radius: 3
-            color: "#2c313a"
-            Rectangle {
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-              width: parent.width * Math.min(1, (w.gttUsedB > 0 && w.gttTotalB > 0 ? w.gttUsedB / w.gttTotalB : 0))
-              height: parent.height
-              color: "#bb9af7"
-              radius: 3
-            }
-          }
-          Text { text: w.gttTotalB > 0 ? Math.round(100 * w.gttUsedB / w.gttTotalB) + "%" : "--"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-        }
-      }
-
-      // ---- N · Network -----------------------------------------------------
-      SysSection {
-        Layout.fillWidth: true
-        visible: popup.tab === "perf"
-        title: "N · Network"
-        summary: w.netDownBps < 0 ? "--" : "↓" + w.fmtRate(w.netDownBps) + " ↑" + w.fmtRate(w.netUpBps)
-
-        Sparkline {
-          Layout.fillWidth: true
-          Layout.preferredHeight: 46
-          series: w.histNetDown
-          seriesB: w.histNetUp
-          autoScale: true
-          stroke: "#7aa2f7"          // down = blue
-          strokeB: "#bb9af7"         // up = violet
-          fill: "#7aa2f7"
-        }
-        // Per-interface live rates (names + arrows, muted).
-        Column {
-          Layout.fillWidth: true
-          spacing: 2
-          Repeater {
-            model: Object.keys(w.ifRates)
-            Text {
-              required property string modelData
-              readonly property var r: w.ifRates[modelData]
-              text: modelData + "   ↓" + w.fmtRate(r ? r[0] : 0) + "   ↑" + w.fmtRate(r ? r[1] : 0)
-              color: popup.muted
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-            }
-          }
-        }
-        Text {
-          text: "auto-scaled · blue ↓ / cyan ↑"
-          color: popup.muted
-          font.family: Style.font.family
-          font.pixelSize: Style.font.caption
-        }
-      }
-
-      // ---- D · Disk --------------------------------------------------------
-      SysSection {
-        Layout.fillWidth: true
-        visible: popup.tab === "disk"
-        title: "D · Disk"
-        summary: w.fmtDisk(w.diskUsedB) + " / " + w.fmtDisk(w.diskTotalB)
-
-        Sparkline {
-          Layout.fillWidth: true
-          Layout.preferredHeight: 36
-          series: w.histDiskR
-          stroke: "#e5c07b"
-          fill: "#e5c07b"
-          autoScale: true
-        }
-        Sparkline {
-          Layout.fillWidth: true
-          Layout.preferredHeight: 36
-          series: w.histDiskW
-          stroke: "#f7768e"
-          fill: "#f7768e"
-          autoScale: true
-        }
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(12)
-          Text { text: "R " + w.fmtRate(Math.max(0, w.diskReadBps)); color: popup.fg; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Text { text: "W " + w.fmtRate(Math.max(0, w.diskWriteBps)); color: popup.fg; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Text { text: Math.round(Math.max(0, w.diskReadIops)) + "/" + Math.round(Math.max(0, w.diskWriteIops)) + " iops"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Item { Layout.fillWidth: true }
-          Text { text: Math.round(w.diskPct) + "% full"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-        }
-
-        // Fuel gauges: one per real mounted volume, deduped by device.
-        Column {
-          Layout.fillWidth: true
-          spacing: 6
-
-          Repeater {
-            model: w.vols
-
-            RowLayout {
-              id: volRow
-              required property var modelData
-              width: parent ? parent.width : 0
-              spacing: Style.space(8)
-
-              Text {
-                Layout.preferredWidth: 76
-                text: volRow.modelData.mnt
-                elide: Text.ElideMiddle
-                color: popup.fg
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-              }
-              Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 10
-                radius: 5
-                color: "#232733"
-                Rectangle {
-                  anchors.left: parent.left
-                  anchors.verticalCenter: parent.verticalCenter
-                  width: parent.width * Math.min(1, volRow.modelData.pct / 100)
-                  height: parent.height
-                  radius: 5
-                  color: popup.levelColor(volRow.modelData.pct)
-                }
-              }
-              Text {
-                Layout.preferredWidth: 96
-                horizontalAlignment: Text.AlignRight
-                text: w.fmtDisk(volRow.modelData.usedB) + "/" + w.fmtDisk(volRow.modelData.sizeB)
-                color: popup.muted
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-              }
-              Text {
-                Layout.preferredWidth: 34
-                horizontalAlignment: Text.AlignRight
-                text: Math.round(volRow.modelData.pct) + "%"
-                color: popup.levelColor(volRow.modelData.pct)
-                font.family: Style.font.family
-                font.pixelSize: Style.font.caption
-                font.bold: true
-              }
-            }
-          }
-        }
-      }
-
-      // ---- P · Processes ----------------------------------------------------
-      SysSection {
-        Layout.fillWidth: true
-        visible: popup.tab === "procs"
-        title: "P · Processes"
-        summary: w.procs.length + " top by " + (w.procSort === "mem" ? "MEM" : "CPU")
-
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(6)
-          Text { text: "PID"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Item { Layout.fillWidth: true }
-          Text { text: "sort: "; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-          Text {
-            text: w.procSort === "mem" ? "MEM%" : "CPU%"
-            color: Color.accent
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: w.procSort = (w.procSort === "cpu" ? "mem" : "cpu") }
-          }
-        }
-
-        Column {
-          Layout.fillWidth: true
-          spacing: 2
-
-          Repeater {
-            model: w.sortedProcs
-
-            Rectangle {
-              id: procRow
-              required property var modelData
-              readonly property bool mine: modelData[1] === w.userName
-              readonly property bool isTarget: w.killTarget === modelData[0]
-              width: parent ? parent.width : 0
-              height: 22
-              radius: 3
-              color: isTarget ? "#2a2e3a" : (rowMouse.containsMouse ? "#22262e" : "transparent")
-
-              MouseArea {
-                id: rowMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                onClicked: { w.killTarget = (w.killTarget === procRow.modelData[0] ? 0 : procRow.modelData[0]); w.killTermed = false }
-              }
-
-              RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 6
-                spacing: Style.space(6)
-
-                Text { text: String(procRow.modelData[0]); color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-                Text {
-                  Layout.fillWidth: true
-                  text: procRow.modelData[2]
-                  elide: Text.ElideRight
-                  color: procRow.mine ? popup.fg : Qt.darker(popup.fg, 1.6)
-                  font.family: Style.font.family
-                  font.pixelSize: Style.font.caption
-                }
-                Text { text: Number(procRow.modelData[w.procSort === "mem" ? 4 : 3]).toFixed(1) + "%"; color: popup.fg; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-                Rectangle {
-                  visible: procRow.mine
-                  width: 42
-                  height: 16
-                  radius: 3
-                  color: killMouse.containsMouse ? "#54303c" : "#3b2430"
-                  border.width: killMouse.containsMouse ? 1 : 0
-                  border.color: "#f7768e"
-                  Text { anchors.centerIn: parent; text: "kill"; color: "#f7768e"; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-                  MouseArea { id: killMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { w.killTarget = procRow.modelData[0]; w.killTermed = false } }
-                }
-              }
-            }
-          }
-        }
-
-        // Inline confirm strip (no nested dialog inside the Flickable).
-        Rectangle {
-          Layout.fillWidth: true
-          visible: w.killTarget > 0
-          height: 40
-          radius: 4
-          color: "#2a1e24"
-          RowLayout {
-            anchors.fill: parent
-            anchors.margins: 8
-            spacing: Style.space(8)
-            Text {
-              Layout.fillWidth: true
-              text: "Kill " + w.killName + " (" + w.killTarget + ")?"
-              elide: Text.ElideRight
-              color: popup.fg
-              font.family: Style.font.family
-              font.pixelSize: Style.font.caption
-            }
-            Rectangle {
-              id: confirmBtn
-              width: 96; height: 22; radius: 3
-              color: confirmMouse.containsMouse ? "#54303c" : "#3b2430"
-              border.width: confirmMouse.containsMouse ? 1 : 0
-              border.color: "#f7768e"
-              Text { anchors.centerIn: parent; text: w.killTermed ? "Force kill (9)" : "Kill (TERM)"; color: "#f7768e"; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-              MouseArea { id: confirmMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: w.doKill(w.killTarget, w.killTermed ? 9 : 15) }
-            }
-            Rectangle {
-              id: cancelBtn
-              width: 60; height: 22; radius: 3
-              color: cancelMouse.containsMouse ? "#2c3040" : "#232733"
-              Text { anchors.centerIn: parent; text: "Cancel"; color: popup.muted; font.family: Style.font.family; font.pixelSize: Style.font.caption }
-              MouseArea { id: cancelMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { w.killTarget = 0; w.killTermed = false } }
-            }
-          }
-        }
-      }
-
-      // ---- H · Hardware -----------------------------------------------------
-      SysSection {
-        id: hwSection
-        Layout.fillWidth: true
-        visible: popup.tab === "hw"
-        title: "H · Hardware"
-        summary: w.hwinfo ? (w.hwinfo.identity.product || w.hwinfo.identity.board || "") : "probing…"
-
-        component HwRow: RowLayout {
-          id: hwRow
-          Layout.fillWidth: true
-          property string label: ""
-          property string value: ""
-          // textFormat PlainText on both fields: values come from DMI /
-          // device descriptors; Qt rich-text auto-detection must never
-          // interpret a markup-shaped device string (marketplace #8246).
-          Text {
-            Layout.preferredWidth: hwSection.labelW
-            text: hwRow.label
-            textFormat: Text.PlainText
-            color: popup.muted
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-          }
-          Text {
-            Layout.fillWidth: true
-            text: hwRow.value
-            textFormat: Text.PlainText
-            color: popup.fg
-            elide: Text.ElideRight
-            font.family: Style.font.family
-            font.pixelSize: Style.font.caption
-          }
-        }
-
-        readonly property var hw: w.hwinfo
-        readonly property real labelW: Style.space(76)
-
-
-        ColumnLayout {
-          id: hwCol
-          Layout.fillWidth: true
-          spacing: Style.space(2)
-          visible: hwSection.hw !== null
-
-          Text {
-            Layout.fillWidth: true
-            text: hwSection.hw && hwSection.hw.identity ? (hwSection.hw.identity.product || "") : ""
-            textFormat: Text.PlainText
-            color: popup.fg
-            font.bold: true
-            font.family: Style.font.family
-            font.pixelSize: Style.font.body
-            elide: Text.ElideRight
-          }
-
-          HwRow { label: "Board";   value: hwSection.hw && hwSection.hw.identity ? (hwSection.hw.identity.board || "—") : "—" }
-          HwRow { label: "BIOS";    value: hwSection.hw && hwSection.hw.identity ? ((hwSection.hw.identity.bios_version || "—") + "  (" + (hwSection.hw.identity.bios_date || "?") + ")") : "—" }
-          HwRow { label: "CPU";     value: hwSection.hw ? hwSection.hw.cpu.model : "" }
-          HwRow {
-            label: "Cores"
-            value: {
-              if (!hwSection.hw) return ""
-              var c = hwSection.hw.cpu
-              var s = (c.cores !== null ? c.cores + "c / " : "") + c.threads + "t"
-              if (c.max_mhz && c.max_mhz !== null) s += "  ·  " + (c.max_mhz / 1000).toFixed(1) + " GHz max"
-              if (c.l3_kb && c.l3_kb !== null) s += "  ·  L3 " + (c.l3_kb / 1024).toFixed(0) + " MiB"
-              return s
-            }
-          }
-          HwRow {
-            label: "Memory"
-            value: {
-              if (!hwSection.hw) return ""
-              var m = hwSection.hw.mem
-              var s = (m.total_mb / 1024).toFixed(0) + " GiB"
-              if (m.type) s += "  ·  " + m.type
-              if (m.speed) s += " @ " + m.speed
-              if (m.banks !== null && m.banks !== undefined) s += "  ·  " + m.banks + " bank" + (m.banks === 1 ? "" : "s")
-              return s
-            }
-          }
-          HwRow { label: "GPU";     value: hwSection.hw ? (hwSection.hw.gpu || "—") : "—" }
-          Repeater {
-            model: hwSection.hw && hwSection.hw.displays ? hwSection.hw.displays : []
-            HwRow { label: index === 0 ? "Display" : ""; value: modelData.connector + "  ·  " + modelData.mode }
-          }
-          Repeater {
-            model: hwSection.hw && hwSection.hw.disks ? hwSection.hw.disks : []
-            HwRow { label: index === 0 ? "Storage" : ""; value: modelData.name + "  ·  " + modelData.size }
-          }
-          Repeater {
-            model: hwSection.hw && hwSection.hw.net ? hwSection.hw.net : []
-            HwRow { label: index === 0 ? "Network" : ""; value: modelData.name + (modelData.driver ? "  ·  " + modelData.driver : "") }
-          }
-          Repeater {
-            model: hwSection.hw && hwSection.hw.audio ? hwSection.hw.audio : []
-            HwRow { label: index === 0 ? "Audio" : ""; value: modelData }
-          }
-          HwRow {
-            visible: hwSection.hw && hwSection.hw.battery !== null && hwSection.hw.battery !== undefined
-            label: "Battery"
-            value: {
-              if (!hwSection.hw || !hwSection.hw.battery) return ""
-              var b = hwSection.hw.battery
-              var s = (b.model || b.manufacturer || "—")
-              if (b.tech) s += "  ·  " + b.tech
-              if (b.health_pct !== null && b.health_pct !== undefined) s += "  ·  " + b.health_pct + "% health"
-              return s
-            }
-          }
-          HwRow { label: "Bluetooth"; value: hwSection.hw ? (hwSection.hw.bluetooth ? "yes" : "no") : "" }
-          HwRow { label: "Devices"; value: hwSection.hw ? (hwSection.hw.io.usb_devices + " USB  ·  " + hwSection.hw.io.pci_devices + " PCI") : "" }
-          HwRow { label: "OS";      value: hwSection.hw ? ((hwSection.hw.os.pretty || "") + "  ·  kernel " + hwSection.hw.os.kernel) : "" }
-          HwRow {
-            label: "Uptime"
-            value: {
-              if (!hwSection.hw) return ""
-              var s = hwSection.hw.os.uptime_s
-              var d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60)
-              return (d > 0 ? d + "d " : "") + h + "h " + m + "m"
-            }
-          }
+      Repeater {
+        model: [
+          { label: "CPU", temp: popup.w.cpuTempC },
+          { label: "GPU", temp: popup.w.gpuTempC },
+          { label: "NVMe", temp: popup.w.nvmeTempC }
+        ]
+        TempPill {
+          required property var modelData
+          label: modelData.label
+          temp: modelData.temp
         }
       }
 
       Text {
-        Layout.topMargin: Style.space(4)
-        text: "click a section header to collapse — " + w.histMax + " sample history"
-        color: popup.muted
+        // 10, not 4: the pills end with their own 6px inner padding, so the
+        // freshness dot was touching the last temperature pill.
+        Layout.leftMargin: 10
+        text: popup.stampText
+        textFormat: Text.PlainText
+        color: popup.probeStale ? popup.cAmber : popup.muted
         font.family: Style.font.family
-        font.pixelSize: Style.font.caption
+        font.pixelSize: 11
+        font.letterSpacing: 0.4
+        font.features: ({ "tnum": 1 })
       }
     }
+
+    // ---- tab bar 36: text tabs, bold + underline when active -------------
+    Item {
+      Layout.fillWidth: true
+      Layout.preferredHeight: 36
+
+      Row {
+        id: tabBar
+        spacing: 4
+
+        Repeater {
+          id: tabRepeater
+          model: popup.tabLabels
+
+          Rectangle {
+            id: tabBtn
+            required property string modelData
+            required property int index
+            readonly property bool active: popup.tabIndex === index
+            width: tabText.implicitWidth + 16
+            height: 32
+            radius: 4
+            color: tabBtn.active || tabMouse.containsMouse ? Qt.alpha(popup.fg, 0.07) : "transparent"
+
+            Text {
+              id: tabText
+              anchors.centerIn: parent
+              text: tabBtn.modelData
+              color: tabBtn.active ? popup.fg : popup.muted
+              font.family: Style.font.family
+              font.pixelSize: 13
+              font.weight: tabBtn.active ? Font.DemiBold : Font.Normal
+            }
+
+            MouseArea {
+              id: tabMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: popup.tab = popup.tabKeys[tabBtn.index]
+            }
+          }
+        }
+      }
+
+      Rectangle {
+        // Underline follows the active tab.
+        anchors.bottom: parent.bottom
+        height: 2
+        radius: 1
+        color: popup.fg
+        readonly property var cur: tabRepeater.count > popup.tabIndex ? tabRepeater.itemAt(popup.tabIndex) : null
+        x: cur ? cur.x + 8 : 0
+        width: cur ? cur.width - 16 : 0
+        Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+        Behavior on width { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+      }
+    }
+
+    // ---- pages ------------------------------------------------------------
+    StackLayout {
+      id: pages
+      Layout.fillWidth: true
+      Layout.fillHeight: true
+      currentIndex: popup.tabIndex
+
+      PerfTab { sysmon: popup.host }
+      DisksTab { sysmon: popup.host }
+      ProcsTab { id: procsTab; sysmon: popup.host }
+      HwTab { sysmon: popup.host }
+    }
   }
+
+  // IPC status reads the Processes page through this (filtered view size,
+  // selection, totals).
+  readonly property var procsPage: procsTab
+
+  // IPC status keeps the v0.5.1 field: colH = active page height. pageSize is
+  // the real content area (must be frameW x frameH minus header + tab bar).
+  readonly property real scrollColH: pages.height
+  readonly property size pageSize: Qt.size(pages.width, pages.height)
+  readonly property real cardW: popup.width
+  readonly property real cardH: popup.height
 }
