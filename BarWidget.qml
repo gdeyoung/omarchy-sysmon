@@ -542,6 +542,8 @@ BarWidget {
           sort: root.procSort,
           selected: root.procSelectedPid,
           selectedName: detailPopup.procsPage && detailPopup.procsPage.sel ? String(detailPopup.procsPage.sel[2]) : "",
+          // first three rows as "name:pid" — lets a test assert sort ORDER
+          top3: detailPopup.procsPage ? detailPopup.procsPage.view.slice(0, 3).map(r => String(r[2]) + ":" + String(r[0])) : [],
           totals: detailPopup.procsPage ? {
             cpu: Math.round(detailPopup.procsPage.totals.cpu * 10) / 10,
             mem: Math.round(detailPopup.procsPage.totals.mem * 10) / 10,
