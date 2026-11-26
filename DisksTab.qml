@@ -39,8 +39,9 @@ Item {
         Layout.preferredHeight: 24
         spacing: 0
 
+        // No Layout.fillHeight here: it makes this header row absorb the column's
+        // height and starve the list below it. The row layout already centres it.
         Text {
-          Layout.fillHeight: true
           verticalAlignment: Text.AlignVCenter
           text: "volumes \u00B7 " + tab.volModel.length + " mounted"
           color: tab.muted
