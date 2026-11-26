@@ -142,9 +142,13 @@ Item {
       }
       Item { Layout.fillWidth: true }
       Text {
-        text: tab.view.length === tab.sysmon.procs.length
-              ? "showing " + tab.view.length
-              : "showing " + tab.view.length + " / " + tab.sysmon.procs.length
+        text: {
+          // v0.6.1: the probe caps its list; say so instead of implying a total.
+          const n = tab.view.length
+          if (tab.sysmon.procsTruncated)
+            return tab.sysmon.procFilter ? "capped — refine the filter" : "showing " + n + " (capped)"
+          return n === tab.sysmon.procs.length ? "showing " + n : "showing " + n + " / " + tab.sysmon.procs.length
+        }
         color: tab.muted
         font.family: Style.font.family
         font.pixelSize: 11

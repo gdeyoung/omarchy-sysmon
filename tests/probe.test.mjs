@@ -4,7 +4,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
@@ -152,6 +153,93 @@ test("procprobe.sh: per-process values match a parallel ps capture", () => {
   }
   // Processes come and go between two captures a few ms apart; allow a little churn.
   assert.ok(Math.abs(d.procs.length - n) <= Math.max(3, n * 0.02), `row count ${d.procs.length} vs ps ${n} (cap hit?)`);
+});
+
+// --- procprobe.sh v2.2 — producer-side caps (v0.6.1, marketplace #16029) ------
+// The widget buffers everything the probe prints, so the caps have to hold in
+// the producer: rows, bytes and field widths. `ps` is replaced through PATH.
+const withStub = (name, body, fn) => {
+  const dir = mkdtempSync(path.join(tmpdir(), "sysmon-stub-"));
+  const stub = path.join(dir, name);
+  writeFileSync(stub, body);
+  chmodSync(stub, 0o755);
+  try {
+    // the stub first on PATH, the real awk/cat/... after it
+    return fn(dir, { PATH: `${dir}:/usr/bin:/bin`, HOME: process.env.HOME });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+// N synthetic `ps -eo pid,user,pcpu,pmem,rss,state,args` rows. Every row
+// contains "zzq", so a filter on it matches all of them.
+const psRows = (n, user = "user", args = "/usr/bin/zzq-proc --flag") =>
+  ["#!/bin/bash",
+   `/usr/bin/awk -v n=${n} -v u="${user}" -v a="${args}" 'BEGIN { for (i = 1; i <= n; i++) printf "%d %s%d zzq-name%d 1.0 0.5 %d S %s --id=%d\\n", 100000 + i, u, i, i % 97, 1234 * (i % 13), a, i }'`,
+   ""].join("\n");
+const procprobe = (env, filter) =>
+  execFileSync("/usr/bin/bash", [path.join(root, "procprobe.sh"), ...filter], { encoding: "utf8", timeout: 10_000, env });
+
+test("procprobe.sh: a filter that matches thousands of rows cannot exceed the hard row cap", () => {
+  withStub("ps", psRows(8000), (dir, env) => {
+    const d = JSON.parse(procprobe(env, ["zzq"]));
+    assert.equal(d.procs.length, 2000, "hard cap: the top 1500 plus at most 500 filter matches");
+    assert.equal(d.truncated, true, "the cap must be reported, not silently applied");
+  });
+});
+
+test("procprobe.sh: with no filter the list is the top 1500 by CPU and says it was capped", () => {
+  withStub("ps", psRows(8000), (dir, env) => {
+    const d = JSON.parse(procprobe(env, []));
+    assert.equal(d.procs.length, 1500);
+    assert.equal(d.truncated, true);
+  });
+});
+
+test("procprobe.sh: a host that fits under the caps is reported complete", () => {
+  withStub("ps", psRows(10), (dir, env) => {
+    const d = JSON.parse(procprobe(env, []));
+    assert.equal(d.procs.length, 10);
+    assert.equal(d.truncated, false);
+  });
+});
+
+test("procprobe.sh: the list stays under 1 MiB however many or how wide the rows are", () => {
+  const wide = psRows(8000, "u".repeat(90), "/usr/bin/" + "a".repeat(160) + " --x=" + "b".repeat(60));
+  withStub("ps", wide, (dir, env) => {
+    const raw = procprobe(env, ["zzq"]);
+    assert.ok(Buffer.byteLength(raw) < 1_048_576, `${(Buffer.byteLength(raw) / 1024).toFixed(0)} KiB of JSON`);
+    assert.equal(JSON.parse(raw).truncated, true);
+  });
+});
+
+test("procprobe.sh: user, name and args fields are cut to a fixed width", () => {
+  const long = psRows(10, "u".repeat(90), "/" + "n".repeat(200) + " arg");
+  withStub("ps", long, (dir, env) => {
+    const d = JSON.parse(procprobe(env, []));
+    assert.equal(d.procs.length, 10);
+    for (const r of d.procs) {
+      assert.ok(r[1].length <= 32, `user is ${r[1].length} chars (cap 32)`);
+      assert.ok(r[2].length <= 64, `name is ${r[2].length} chars (cap 64)`);
+      assert.ok(r[7].length <= 120, `args is ${r[7].length} chars (cap 120)`);
+    }
+  });
+});
+
+// --- sysinfo-probe.sh: one hung helper ------------------------------------------
+test("sysinfo-probe.sh: a hung helper costs its own field, never the inventory", () => {
+  // hyprctl talks to the compositor's socket. If it never answers, the probe
+  // must still return inside its per-command deadline, with the fallback.
+  withStub("hyprctl", "#!/bin/bash\nexec /usr/bin/sleep 30\n", (dir, env) => {
+    const t0 = Date.now();
+    const out = execFileSync("/usr/bin/bash", [path.join(root, "sysinfo-probe.sh")], { encoding: "utf8", timeout: 15_000, env });
+    const ms = Date.now() - t0;
+    const lines = out.trim().split("\n");
+    assert.equal(lines.length, 1, "one JSON line");
+    assert.ok(ms < 5000, `one hung helper stretched the probe to ${ms} ms`);
+    const d = JSON.parse(lines[0]);
+    if (readFileSync("/etc/os-release", "utf8").includes("Omarchy"))
+      assert.match(d.os.hyprland, /^\d+\.\d+/, "the pacman fallback must supply the version");
+  });
 });
 
 // --- sysinfo-probe.sh v3 -------------------------------------------------------

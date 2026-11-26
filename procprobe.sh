@@ -17,22 +17,41 @@
 # and kill) sorts LAST by CPU — a plain head cap makes search miss it.
 # Rows kept = top-1500 by CPU UNION any row matching the filter substring
 # (arg 1). Emitted when the Processes tab is visible, on a 2s tick.
+#
+# v2.2 — producer-side caps (v0.6.1, marketplace #16029): the widget buffers
+# the whole output, so the caps have to hold here. The top CAP rows by CPU
+# UNION filter matches, up to HCAP rows and BCAP bytes of JSON in total;
+# user, name and args are cut to fixed widths. The object ends with
+# "truncated":true whenever a cap dropped a row the rules would have kept.
 set -u
 FILTER="${1:-}"
-ps -eo pid,user,pcpu,pmem,rss,state,args --no-headers --sort=-pcpu | awk -v F="$FILTER" -v CAP=1500 '
+CAP=1500      # rows from the top of ps's -pcpu sort: always kept
+HCAP=2000     # hard total: those rows plus filter matches
+BCAP=1048576  # hard total bytes of JSON
+ps -eo pid,user,pcpu,pmem,rss,state,args --no-headers --sort=-pcpu \
+  | awk -v F="$FILTER" -v CAP=$CAP -v HCAP=$HCAP -v BCAP=$BCAP '
+BEGIN { printf "{\"procs\":[" }
 {
-  keep = (NR <= CAP)
-  if (!keep && F != "") keep = (index(tolower($0), tolower(F)) > 0)
-  if (!keep) next
-  u=$2; pcpu=$3; pmem=$4; rss=$5; st=$6
-  a=""
-  for (i=7; i<=NF; i++) a=a (i>7?" ":"") $i
-  n=a; sub(/ .*/, "", n); gsub(/^\[|\]$/, "", n)
+  if (NR > CAP) {
+    if (F == "") { trunc = 1; exit }                  # unfiltered: a top-CAP view
+    if (index(tolower($0), tolower(F)) == 0) next     # the filter excluded it, not a cap
+  }
+  if (emitted >= HCAP) { trunc = 1; exit }            # hard row cap
+  u = substr($2, 1, 32); pcpu = $3; pmem = $4; rss = $5; st = $6
+  a = ""
+  for (i = 7; i <= NF; i++) a = a (i > 7 ? " " : "") $i
+  n = a; sub(/ .*/, "", n); gsub(/^\[|\]$/, "", n)
   if (n ~ /^\//) sub(/.*\//, "", n)
-  if (n=="") n="?"
-  a=substr(a,1,120)
-  gsub(/\\/,"\\\\",a); gsub(/"/,"\\\"",a); gsub(/[[:cntrl:]]/, " ",a)
-  gsub(/\\/,"\\\\",u); gsub(/"/,"\\\"",u)
-  gsub(/\\/,"\\\\",n); gsub(/"/,"\\\"",n)
-  printf "%s[%d,\"%s\",\"%s\",%.1f,%.1f,%d,\"%s\",\"%s\"]", (emitted++ > 0 ? "," : ""), $1, u, n, pcpu, pmem, rss, st, a
-}' | { printf "{\"procs\":["; cat; printf "]}\n"; }
+  if (n == "") n = "?"
+  n = substr(n, 1, 64)
+  a = substr(a, 1, 120)
+  gsub(/\\/, "\\\\", a); gsub(/"/, "\\\"", a); gsub(/[[:cntrl:]]/, " ", a)
+  gsub(/\\/, "\\\\", u); gsub(/"/, "\\\"", u)
+  gsub(/\\/, "\\\\", n); gsub(/"/, "\\\"", n)
+  row = sprintf("[%d,\"%s\",\"%s\",%.1f,%.1f,%d,\"%s\",\"%s\"]", $1, u, n, pcpu, pmem, rss, st, a)
+  if (bytes + length(row) + 1 > BCAP) { trunc = 1; exit }   # hard byte cap
+  bytes += length(row) + 1
+  printf "%s%s", (emitted++ > 0 ? "," : ""), row
+}
+END { printf "],\"truncated\":%s}\n", (trunc ? "true" : "false") }
+'
