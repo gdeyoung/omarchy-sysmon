@@ -149,7 +149,13 @@ Item {
     Hair { Layout.fillWidth: true }
 
     // list (shrinks by 28 while the confirm strip is up — the frame never moves)
-    ProcList { owner: tab }
+    ProcList { id: procList; owner: tab }
+
+    // Test/harness readback (host IPC "scroll" verb): the list offset, so a
+    // script can prove scrolling survives the 2s model ticks without a pointer.
+    readonly property real listY: procList.contentY
+    readonly property real listMax: Math.max(0, procList.contentHeight - procList.height)
+    function setScroll(y) { procList.contentY = Math.max(0, Math.min(y, tab.listMax)) }
 
     KillBar {
       Layout.fillWidth: true

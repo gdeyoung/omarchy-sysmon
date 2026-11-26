@@ -499,6 +499,7 @@ BarWidget {
     function filter(text: string): void { root.procFilter = text }
     function sort(col: string): void { root.procSort = col }
     function select(pid: int): void { root.procSelectedPid = pid }
+    function scroll(y: real): void { if (detailPopup.procsPage) detailPopup.procsPage.setScroll(y) }
 
     function status(): string {
       return JSON.stringify({
@@ -544,6 +545,8 @@ BarWidget {
           selectedName: detailPopup.procsPage && detailPopup.procsPage.sel ? String(detailPopup.procsPage.sel[2]) : "",
           // first three rows as "name:pid" — lets a test assert sort ORDER
           top3: detailPopup.procsPage ? detailPopup.procsPage.view.slice(0, 3).map(r => String(r[2]) + ":" + String(r[0])) : [],
+          listY: detailPopup.procsPage ? Math.round(detailPopup.procsPage.listY) : -1,
+          listMax: detailPopup.procsPage ? Math.round(detailPopup.procsPage.listMax) : -1,
           totals: detailPopup.procsPage ? {
             cpu: Math.round(detailPopup.procsPage.totals.cpu * 10) / 10,
             mem: Math.round(detailPopup.procsPage.totals.mem * 10) / 10,
