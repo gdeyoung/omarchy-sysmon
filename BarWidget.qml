@@ -85,6 +85,27 @@ BarWidget {
   property string procSort: "cpu"
   property int killTarget: 0
   property bool killTermed: false   // true after a TERM was sent to killTarget
+  property int killExit: 0          // exit code of the last kill (0 = sent ok)
+  // Cancel / target-gone resets every strip state.
+  onKillTargetChanged: if (killTarget === 0) { killTermed = false; killExit = 0 }
+  // Processes tab state lives on the host so IPC + tests can drive it and it
+  // survives tab switches.
+  property int procSelectedPid: 0
+  property string procFilter: ""
+  property var pidHist: ({})        // pid -> "v,v,..." (30 samples @2s = 1m)
+  // Disks tab: per whole-disk rates (deltas of the probe's cumulative counters).
+  property string diskDev: ""       // physical disk behind /home ("" = unresolved)
+  property var diskNames: []
+  property var diskIo: ({})         // name -> [readBps, writeBps]
+  property var diskHistR: ({})      // name -> [{t, v}, ...]
+  property var diskHistW: ({})
+  property var prevDiskStats: ({})
+  property real upS: 0
+  // Provenance stamp (popup header): when the last probe line landed, plus a
+  // 1s clock to age it.
+  property real probeStampMs: 0
+  property real clockNow: 0
+  property bool procTabActive: false
   // The popup gates the kill affordance on this; uname resolves at runtime.
   readonly property string userName: Quickshell.env("USER") || ""
   readonly property var killRow: {
@@ -108,17 +129,12 @@ BarWidget {
   }
 
   function doKill(pid, sig) {
-    Quickshell.execDetached(["kill", "-" + sig, String(pid)])
-    if (sig === 15) {
-      // Keep the target selected; if it survives the next proc refresh the
-      // confirm strip escalates to Force kill (9).
-      killTermed = true
-      Qt.callLater(refreshProcs)
-    } else {
-      killTarget = 0
-      killTermed = false
-      Qt.callLater(refreshProcs)
-    }
+    // A real Process (not execDetached): the exit code tells the user why a
+    // kill did nothing ("no permission" on EPERM) instead of failing silently.
+    killExit = 0
+    killTermed = (sig === 15)   // keep target; escalates to Force kill (9) if it survives
+    killProc.command = ["/usr/bin/kill", "-" + sig, String(pid)]
+    killProc.running = true
   }
 
   function refreshProcs() {
@@ -132,7 +148,19 @@ BarWidget {
     } catch (e) {
       return
     }
-    if (data && data.procs) procs = data.procs
+    if (!data || !data.procs) return
+    procs = data.procs
+    // per-pid CPU% history for the row sparks: 30 samples @2s = 1m
+    const nh = {}
+    for (let i = 0; i < procs.length; i++) {
+      const key = String(procs[i][0])
+      const v = Math.max(0, Math.min(100, Number(procs[i][3]) || 0)).toFixed(0)
+      let s = pidHist[key] ? pidHist[key] + "," + v : v
+      const parts = s.split(",")
+      if (parts.length > 30) s = parts.slice(parts.length - 30).join(",")
+      nh[key] = s
+    }
+    pidHist = nh
   }
 
   function applyVols(data) {
@@ -141,9 +169,44 @@ BarWidget {
     for (let i = 0; i < v.length; i++) {
       const used = Number(v[i][1]) || 0
       const size = Number(v[i][2]) || 1
-      out.push({ mnt: v[i][0], usedB: used, sizeB: size, pct: size > 0 ? (used / size) * 100 : 0 })
+      out.push({ mnt: v[i][0], usedB: used, sizeB: size, pct: size > 0 ? (used / size) * 100 : 0,
+                  fs: String(v[i][3] || "") })
     }
     vols = out
+  }
+
+  // Per whole-disk read/write rates from the probe's cumulative sector
+  // counters ({n, rs, ws, ri, wi}); first sight of a disk only primes it.
+  function applyDisks(data, now, dt) {
+    const disks = data.disks || []
+    const names = []
+    const io = {}
+    const nhR = {}
+    const nhW = {}
+    const next = {}
+    for (let i = 0; i < disks.length; i++) {
+      const d = disks[i]
+      const name = String(d.n)
+      const prev = prevDiskStats[name]
+      let rBps = 0, wBps = 0
+      if (prev && dt > 0.4) {
+        rBps = Math.max(0, ((Number(d.rs) - prev[0]) * 512) / dt)
+        wBps = Math.max(0, ((Number(d.ws) - prev[1]) * 512) / dt)
+        nhR[name] = pushHist(diskHistR[name] || [], now, rBps)
+        nhW[name] = pushHist(diskHistW[name] || [], now, wBps)
+      } else {
+        nhR[name] = diskHistR[name] || []
+        nhW[name] = diskHistW[name] || []
+      }
+      next[name] = [Number(d.rs) || 0, Number(d.ws) || 0]
+      io[name] = [rBps, wBps]
+      names.push(name)
+    }
+    prevDiskStats = next
+    diskNames = names
+    diskIo = io
+    diskHistR = nhR
+    diskHistW = nhW
   }
 
   // Previous counters for delta math
@@ -176,6 +239,17 @@ BarWidget {
     if (bps < 1000000) return Math.round(bps / 1000) + "K"
     if (bps < 1000000000) return (bps / 1000000).toFixed(1) + "M"
     return (bps / 1000000000).toFixed(1) + "G"
+  }
+  // Detail-popup formatters: spelled-out units (the popup has the room).
+  function fmtRateLong(bps) {
+    if (!(bps > 0)) return "0 B/s"
+    const units = ["B/s", "KiB/s", "MiB/s", "GiB/s"]
+    let v = bps, i = 0
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+    return (i === 0 ? Math.round(v) : v.toFixed(v < 10 ? 2 : 1)) + " " + units[i]
+  }
+  function fmtRss(kb) {
+    return kb >= 1048576 ? (kb / 1048576).toFixed(1) + "G" : Math.round(kb / 1024) + "M"
   }
 
   readonly property string ramText: fmtGb(ramUsedMb) + "/" + fmtGb(ramTotalMb)
@@ -271,6 +345,10 @@ BarWidget {
 
     const now = Date.now()
     const dt = (now - root.prevStampMs) / 1000
+    root.probeStampMs = now
+    root.upS = Number(data.up_s) || root.upS
+    root.diskDev = String(data.disk_dev || "")
+    root.applyDisks(data, now, dt)
 
     const cTotal = Number(data.cpu_total)
     const cIdle = Number(data.cpu_idle)
@@ -406,7 +484,11 @@ BarWidget {
         opened: root.popupOpen,
         tab: detailPopup.tab,
         popupH: detailPopup.height,
-        contentH: detailPopup.contentHeight,
+        popupW: detailPopup.width,
+        frameW: detailPopup.contentWidth,
+        frameH: detailPopup.contentHeight,
+        pageW: detailPopup.pageSize.width,
+        pageH: detailPopup.pageSize.height,
         colH: detailPopup.scrollColH,
         hist: {
           cpu: root.histCpu.length,
@@ -427,8 +509,25 @@ BarWidget {
           cores: root.corePcts.length,
           ifaces: Object.keys(root.ifRates),
           procs: root.procs.length,
-          vols: root.vols.map(v => v.mnt + " " + Math.round(v.pct) + "%")
-        }
+          vols: root.vols.map(v => v.mnt + " " + Math.round(v.pct) + "%"),
+          diskDev: root.diskDev,
+          disks: root.diskNames,
+          upS: root.upS
+        },
+        procs: {
+          n: root.procs.length,
+          filter: root.procFilter,
+          sort: root.procSort,
+          selected: root.procSelectedPid,
+          killTarget: root.killTarget,
+          killExit: root.killExit,
+          pidHist: Object.keys(root.pidHist).length
+        },
+        hw: {
+          loaded: root.hwinfo !== null,
+          hostname: root.hwinfo ? root.hwinfo.os.hostname : ""
+        },
+        staleMs: root.probeStampMs > 0 ? Math.round(root.clockNow - root.probeStampMs) : -1
       })
     }
   }
@@ -444,7 +543,9 @@ BarWidget {
 
   Process {
     id: procProbe
-    command: ["/bin/bash", Qt.resolvedUrl("procprobe.sh").toString().replace("file://", "")]
+    // arg 1 = live filter: the probe keeps top-1500-by-CPU UNION filter matches,
+    // so a 0%-CPU target is never dropped on a busy host.
+    command: ["/bin/bash", Qt.resolvedUrl("procprobe.sh").toString().replace("file://", ""), root.procFilter]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.applyProcs(text)
@@ -464,6 +565,16 @@ BarWidget {
     }
   }
 
+  Process {
+    // kill(1) as a real process so its exit code reaches the confirm strip.
+    id: killProc
+    stdout: StdioCollector { waitForEnd: true }
+    onExited: {
+      root.killExit = exitCode
+      Qt.callLater(root.refreshProcs)
+    }
+  }
+
   function refreshHwinfo() {
     if (!hwProbe.running) hwProbe.running = true
   }
@@ -471,10 +582,19 @@ BarWidget {
   Timer {
     // Process table refresh: only while the popup is open.
     interval: 2000
-    running: popupOpen
+    running: popupOpen && procTabActive
     repeat: true
     triggeredOnStart: true
     onTriggered: root.refreshProcs()
+  }
+
+  Timer {
+    // 1s clock for the popup's provenance stamp (ages the last-probe time).
+    interval: 1000
+    running: root.popupOpen
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.clockNow = Date.now()
   }
 
   Timer {
