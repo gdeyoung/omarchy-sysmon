@@ -124,4 +124,35 @@ test("BarWidget.qml starts no probe without the deadline wrapper", () => {
   const bare = [...qml.matchAll(/command:\s*\[\s*"(?:\/bin\/bash|\/usr\/bin\/(?:bash|kill|timeout))"/g)]
     .map((m) => m[0].trim());
   assert.deepEqual(bare, [], "build every Process command through Probe.js; bare: " + bare.join(" | "));
-});
+  });
+
+  // --- what the tabs show once a probe run has died ------------------------------
+  // A run killed at its deadline leaves no rows. Drawing the loading skeleton for
+  // that state is the "permanently busy" look the review complained about, so
+  // skeletons belong to "no run has finished yet" only; afterwards the tab says
+  // the last run died, and keeps saying it while the retries run.
+  test("Processes and Hardware stop drawing skeletons once a probe run has died, and say why", () => {
+  const widget = readFileSync(path.join(root, "BarWidget.qml"), "utf8");
+  const procs = readFileSync(path.join(root, "ProcList.qml"), "utf8");
+  const hw = readFileSync(path.join(root, "HwList.qml"), "utf8");
+  assert.match(widget, /readonly property int procsProbeDeadlineMs: Probe\.DEADLINE_MS\.procs/);
+  assert.match(widget, /readonly property int hwProbeDeadlineMs: Probe\.DEADLINE_MS\.hw/);
+
+  const skeletonVisible = (qml, name) => {
+  const m = qml.match(/\/\/ skeleton[^\n]*\n[\s\S]*?visible: ([^\n]+)/);
+  assert.ok(m, `${name}: skeleton block not found`);
+  return m[1];
+  };
+  assert.match(skeletonVisible(procs, "ProcList"), /procsProbeExit === -1/);
+  assert.match(skeletonVisible(hw, "HwList"), /hwProbeExit === -1/);
+
+  for (const [qml, name] of [[procs, "ProcList"], [hw, "HwList"]]) {
+  const at = qml.indexOf("// probe-died state");
+  assert.ok(at > 0, `${name}: no probe-died notice`);
+  const notice = qml.slice(at);
+  // both ways timeout(1) reports a kill: 124 (TERM took) and 137 (KILL was needed)
+  assert.match(notice, /code === 124 \|\| code === 137/);
+  assert.match(notice, /DeadlineMs \/ 1000/);
+  assert.match(notice, /exited ["']/);
+  }
+  });

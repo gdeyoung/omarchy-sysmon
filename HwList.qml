@@ -87,16 +87,38 @@ ListView {
     }
   }
 
-  // skeleton until hwinfo lands (one-shot fetch on first popup open)
+  // skeleton until the first hardware probe finishes (one-shot fetch on
+  // popup open). v0.6.1: a run that died is not drawn as "still loading".
   Column {
     parent: list
     anchors.fill: parent
     anchors.margins: 8
-    visible: !list.owner.sysmon.hwinfo
+    visible: !list.owner.sysmon.hwinfo && list.owner.sysmon.hwProbeExit === -1
     spacing: 14
     Repeater {
       model: 14
       SkeletonRow { w: 240 + (index % 5) * 120 }
+    }
+  }
+
+  // probe-died state (v0.6.1): the inventory never arrived.
+  Item {
+    parent: list
+    anchors.fill: parent
+    visible: !list.owner.sysmon.hwinfo && list.owner.sysmon.hwProbeExit !== -1
+    Text {
+      anchors.centerIn: parent
+      text: {
+        const s = list.owner.sysmon
+        const code = s.hwProbeExit
+        return code === 124 || code === 137
+          ? "hardware inventory unavailable \u2014 the probe hit its " + (s.hwProbeDeadlineMs / 1000) + " s limit; switch tabs to retry"
+          : "hardware inventory unavailable \u2014 the probe exited " + code + "; switch tabs to retry"
+      }
+      textFormat: Text.PlainText
+      color: list.muted
+      font.family: Style.font.family
+      font.pixelSize: 12
     }
   }
 }

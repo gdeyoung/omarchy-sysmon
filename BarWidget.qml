@@ -490,6 +490,9 @@ BarWidget {
   property int sysProbeExit: -1
   property int procsProbeExit: -1
   property int hwProbeExit: -1
+  // The deadlines behind those exit codes, for the tabs' "no data" notices.
+  readonly property int procsProbeDeadlineMs: Probe.DEADLINE_MS.procs
+  readonly property int hwProbeDeadlineMs: Probe.DEADLINE_MS.hw
   property int probeFailures: 0      // non-zero exits since load
   property int probeDeadlines: 0     // of those, runs killed at their deadline
   // The process probe capped its list (rows or bytes); the footer says so.

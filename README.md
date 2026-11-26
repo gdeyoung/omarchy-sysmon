@@ -122,7 +122,7 @@ omarchy restart shell
 
 A `Process` runs `sysmon.sh` every tick; the script prints exactly one JSON line (32 keys: per-core jiffies, load, swap, temps, GPU counters, disk IO, per-interface bytes, mounted volumes) and the widget parses it. Cumulative counters are converted to rates in the widget between ticks — the probe stays stateless (~150 ms per run). While the popup is open a second probe (`procprobe.sh`, ~30 ms) feeds the process table every 2 s, and `sysinfo-probe.sh` runs once per open (~0.7 s) for the Hardware tab. Charts are one `Canvas` sparkline each; no extra processes while idle.
 
-Every probe run has a hard deadline (`Probe.js`): the widget starts it under `timeout(1)`, so a stalled helper is terminated with all of its descendants, incomplete output is never applied, and the next tick retries. The hardware inventory's own helpers are each bounded to 1 s.
+Every probe run has a hard deadline (`Probe.js`): the widget starts it under `timeout(1)`, so a stalled helper is terminated with all of its descendants, incomplete output is never applied, and the next tick retries. The hardware inventory's own helpers are each bounded to 1 s. When a run dies, the Processes and Hardware tabs drop their loading skeleton for a line that says so (`no process data — the last probe hit its 3 s limit; retrying`).
 
 ## License
 
