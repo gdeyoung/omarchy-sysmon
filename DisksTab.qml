@@ -40,6 +40,8 @@ Item {
         spacing: 0
 
         Text {
+          Layout.fillHeight: true
+          verticalAlignment: Text.AlignVCenter
           text: "volumes \u00B7 " + tab.volModel.length + " mounted"
           color: tab.muted
           font.family: Style.font.family
@@ -50,8 +52,9 @@ Item {
         Item { Layout.fillWidth: true }
         Text {
           visible: tab.sysmon.diskDev !== ""
-          text: tab.sysmon.diskDev + "  R " + tab.sysmon.fmtRateLong(Math.max(0, tab.sysmon.diskReadBps))
-              + "  W " + tab.sysmon.fmtRateLong(Math.max(0, tab.sysmon.diskWriteBps))
+          text: tab.sysmon.diskDev + " \u00B7 R " + tab.sysmon.fmtRateLong(Math.max(0, tab.sysmon.diskReadBps))
+              + " \u00B7 W " + tab.sysmon.fmtRateLong(Math.max(0, tab.sysmon.diskWriteBps))
+          textFormat: Text.PlainText
           color: tab.muted
           font.family: Style.font.family
           font.pixelSize: 11

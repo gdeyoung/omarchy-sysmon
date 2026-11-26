@@ -22,6 +22,7 @@ Item {
       Layout.fillWidth: true
       Text {
         text: g.label
+        textFormat: Text.PlainText
         color: g.muted
         font.family: Style.font.family
         font.pixelSize: 11
