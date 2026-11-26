@@ -251,6 +251,13 @@ BarWidget {
   function fmtRss(kb) {
     return kb >= 1048576 ? (kb / 1048576).toFixed(1) + "G" : Math.round(kb / 1024) + "M"
   }
+  // compact size from bytes: "768M", "10.8G", "1.2T" (popup hero figures)
+  function fmtSizeP(b) {
+    const u = ["B", "K", "M", "G", "T"]
+    let v = Number(b) || 0, i = 0
+    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++ }
+    return (i === 0 ? Math.round(v) : v >= 100 ? v.toFixed(0) : v.toFixed(1)) + u[i]
+  }
 
   readonly property string ramText: fmtGb(ramUsedMb) + "/" + fmtGb(ramTotalMb)
   readonly property string cpuText: cpuPct < 0 ? "--%" : Math.round(cpuPct) + "%"
