@@ -83,6 +83,17 @@ test("procprobe.sh: names carry no spaces even when the command does", () => {
   assert.ok(d.procs.every((r) => !/\s/.test(r[2])), JSON.stringify(d.procs.filter((r) => /\s/.test(r[2])).slice(0, 3)));
 });
 
+test("procprobe.sh: a kernel thread keeps its full name (migration/0 is not \"0\")", () => {
+  // The basename rule is for absolute paths (/usr/bin/sleep -> sleep). Kernel
+  // threads arrive as "[migration/0]"; taking the text after the last slash
+  // produced rows named "0", "1", "2"… at the top of an a–z list.
+  const d = oneJson("procprobe.sh");
+  const threads = d.procs.filter((r) => /^\[.*\]$/.test(r[7]));
+  assert.ok(threads.length > 10, `expected kernel threads on this host, saw ${threads.length}`);
+  const broken = threads.filter((r) => r[2] !== r[7].slice(1, -1));
+  assert.deepEqual(broken.map((r) => `${r[2]} <- ${r[7]}`).slice(0, 5), []);
+});
+
 test("procprobe.sh: a 0%-CPU process is findable through the filter argument", async () => {
   // Rename argv0 so the row is findable by name; a plain `sleep 30` sits at 0% CPU.
   // The test process owns the child directly — a `bash -c '... &'` job does not

@@ -28,7 +28,7 @@ ps -eo pid,user,pcpu,pmem,rss,state,args --no-headers --sort=-pcpu | awk -v F="$
   a=""
   for (i=7; i<=NF; i++) a=a (i>7?" ":"") $i
   n=a; sub(/ .*/, "", n); gsub(/^\[|\]$/, "", n)
-  if (match(n, /\/[^\/]+$/)) n=substr(n, RSTART+1)
+  if (n ~ /^\//) sub(/.*\//, "", n)
   if (n=="") n="?"
   a=substr(a,1,120)
   gsub(/\\/,"\\\\",a); gsub(/"/,"\\\"",a); gsub(/[[:cntrl:]]/, " ",a)
