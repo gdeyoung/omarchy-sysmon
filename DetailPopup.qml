@@ -99,7 +99,9 @@ PopupCard {
       }
 
       Text {
-        Layout.leftMargin: 4
+        // 10, not 4: the pills end with their own 6px inner padding, so the
+        // freshness dot was touching the last temperature pill.
+        Layout.leftMargin: 10
         text: popup.stampText
         textFormat: Text.PlainText
         color: popup.probeStale ? popup.cAmber : popup.muted
