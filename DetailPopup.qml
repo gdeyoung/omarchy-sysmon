@@ -175,10 +175,14 @@ PopupCard {
 
       PerfTab { sysmon: popup.host }
       DisksTab { sysmon: popup.host }
-      ProcsTab { sysmon: popup.host }
+      ProcsTab { id: procsTab; sysmon: popup.host }
       HwTab { sysmon: popup.host }
     }
   }
+
+  // IPC status reads the Processes page through this (filtered view size,
+  // selection, totals).
+  readonly property var procsPage: procsTab
 
   // IPC status keeps the v0.5.1 field: colH = active page height. pageSize is
   // the real content area (must be frameW x frameH minus header + tab bar).

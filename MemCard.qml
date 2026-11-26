@@ -12,13 +12,20 @@ SectionCard {
   readonly property color cBlue: "#7aa2f7"
   readonly property color cViolet: "#bb9af7"
 
-  // memory breakdown fractions [used, buff, cache, rest]
+  // The probe defines used = total - MemAvailable, so "avail" is simply the
+  // remainder. Cache is reclaimable and sits INSIDE avail, not beside it —
+  // the KDE original computed avail = total - used - buff - cache, which
+  // double-subtracts the page cache and reads ~0 on a well-cached machine.
+  readonly property real availMb: Math.max(0, sysmon.ramTotalMb - sysmon.ramUsedMb)
+
+  // memory bar fractions [used, buff, cache, rest], clamped so the segments
+  // never exceed the bar (cache overlaps avail)
   readonly property var memFracs: {
     const t = sysmon.ramTotalMb
     if (t <= 0) return [0, 0, 0, 1]
-    const u = sysmon.ramUsedMb / t
-    const b = (sysmon.buffersKb / 1024) / t
-    const c = (sysmon.cachedKb / 1024) / t
+    const u = Math.min(1, sysmon.ramUsedMb / t)
+    const b = Math.min(1 - u, (sysmon.buffersKb / 1024) / t)
+    const c = Math.min(1 - u - b, (sysmon.cachedKb / 1024) / t)
     return [u, b, c, Math.max(0, 1 - u - b - c)]
   }
 
@@ -98,8 +105,7 @@ SectionCard {
       text: "used " + sysmon.fmtGb(sysmon.ramUsedMb)
           + " \u00B7 buff " + sysmon.fmtGbB(sysmon.buffersKb)
           + " \u00B7 cache " + sysmon.fmtGbB(sysmon.cachedKb)
-          + " \u00B7 avail " + sysmon.fmtGb(Math.max(0, sysmon.ramTotalMb - sysmon.ramUsedMb
-              - sysmon.buffersKb / 1024 - sysmon.cachedKb / 1024))
+          + " \u00B7 avail " + sysmon.fmtGb(card.availMb)
     }
 
     Sparkline {

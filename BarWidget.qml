@@ -104,7 +104,7 @@ BarWidget {
   // Provenance stamp (popup header): when the last probe line landed, plus a
   // 1s clock to age it.
   property real probeStampMs: 0
-  property real clockNow: 0
+  property real clockNow: Date.now()
   property bool procTabActive: false
   // The popup gates the kill affordance on this; uname resolves at runtime.
   readonly property string userName: Quickshell.env("USER") || ""
@@ -233,7 +233,13 @@ BarWidget {
 
   function fmtGb(mb) { return (mb / 1024).toFixed(1) + "G" }
   function fmtGbB(kb) { return (kb / 1048576).toFixed(1) + "G" }
-  function fmtDisk(b) { return Math.round(b / 1073741824) + "G" }
+  // GiB rounded; MiB below 1 GiB and one decimal below 10 GiB, so a 183 MiB
+  // /boot reads "183M / 2.0G" instead of "0G / 2G".
+  function fmtDisk(b) {
+    const g = b / 1073741824
+    if (g < 1) return Math.round(b / 1048576) + "M"
+    return (g < 10 ? g.toFixed(1) : Math.round(g)) + "G"
+  }
   function fmtRate(bps) {
     if (bps < 0) return "0K"
     if (bps < 1000000) return Math.round(bps / 1000) + "K"
@@ -523,10 +529,20 @@ BarWidget {
         },
         procs: {
           n: root.procs.length,
+          view: detailPopup.procsPage ? detailPopup.procsPage.view.length : -1,
           filter: root.procFilter,
           sort: root.procSort,
           selected: root.procSelectedPid,
+          selectedName: detailPopup.procsPage && detailPopup.procsPage.sel ? String(detailPopup.procsPage.sel[2]) : "",
+          totals: detailPopup.procsPage ? {
+            cpu: Math.round(detailPopup.procsPage.totals.cpu * 10) / 10,
+            mem: Math.round(detailPopup.procsPage.totals.mem * 10) / 10,
+            rssKb: Math.round(detailPopup.procsPage.totals.rss)
+          } : null,
           killTarget: root.killTarget,
+          killName: root.killName,
+          killAlive: root.killAlive,
+          killTermed: root.killTermed,
           killExit: root.killExit,
           pidHist: Object.keys(root.pidHist).length
         },
@@ -534,7 +550,7 @@ BarWidget {
           loaded: root.hwinfo !== null,
           hostname: root.hwinfo ? root.hwinfo.os.hostname : ""
         },
-        staleMs: root.probeStampMs > 0 ? Math.round(root.clockNow - root.probeStampMs) : -1
+        staleMs: root.probeStampMs > 0 ? Math.max(0, Math.round(root.clockNow - root.probeStampMs)) : -1
       })
     }
   }
@@ -585,6 +601,14 @@ BarWidget {
   function refreshHwinfo() {
     if (!hwProbe.running) hwProbe.running = true
   }
+
+  // ---- test / harness verbs (additive; README "IPC") -----------------------
+  // The UI state mirrors these, so a script can drive filter/sort/selection
+  // and read the result back from status(). Deliberately NO kill verb: ending
+  // a process is a click on the confirm strip, not a command.
+  function filter(text: string): void { root.procFilter = text }
+  function sort(col: string): void { root.procSort = col }
+  function select(pid: int): void { root.procSelectedPid = pid }
 
   Timer {
     // Process table refresh: only while the popup is open.

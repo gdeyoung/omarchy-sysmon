@@ -15,7 +15,9 @@ Item {
   readonly property var sortCol: ({ name: 2, user: 1, pid: 0, cpu: 3, mem: 4, rss: 5 })
   readonly property int fixedW: 444
 
-  // selection lives on the tab and is mirrored to the host (IPC status/tests)
+  // selection lives on the tab and is mirrored to the host (IPC status/tests).
+  // Two-way: a row click writes the tab property (breaking its binding), so
+  // the host -> tab direction is an explicit Connections.
   property int selectedPid: sysmon.procSelectedPid
   onSelectedPidChanged: if (sysmon.procSelectedPid !== selectedPid) sysmon.procSelectedPid = selectedPid
 
@@ -83,6 +85,18 @@ Item {
   function headerArrow(key) {
     if (sysmon.procSort !== key) return ""
     return (key === "name" || key === "user") ? " \u25B4" : " \u25BE"
+  }
+
+  // host -> tab: IPC filter/select must reach the tab even after a click has
+  // broken the bindings above, and the search field must show the live filter.
+  Connections {
+    target: tab.sysmon
+    function onProcSelectedPidChanged() {
+      if (tab.selectedPid !== tab.sysmon.procSelectedPid) tab.selectedPid = tab.sysmon.procSelectedPid
+    }
+    function onProcFilterChanged() {
+      if (search.text !== tab.sysmon.procFilter) search.text = tab.sysmon.procFilter
+    }
   }
 
   ColumnLayout {
